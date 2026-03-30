@@ -1,0 +1,229 @@
+---
+title: "Agent provisioning"
+description: "How CREDEBL spins up per-organization Credo (AFJ) agents as Docker containers and what configuration is required."
+---
+
+## Overview
+
+The `agent-provisioning` microservice is responsible for creating a dedicated Credo (formerly Aries Framework JavaScript) agent for each organization that onboards to the platform. When an organization registers and provisions a wallet, the service:
+
+1. Generates a JSON agent configuration file for that organization
+2. Generates a per-organization `docker-compose` file
+3. Runs the agent container using the Credo image specified by `AFJ_VERSION`
+4. Writes the agent's admin endpoint to an endpoint file so `agent-service` can connect to it
+
+The `agent-service` microservice communicates with the running agent containers on behalf of the platform. It shares the agent configuration and endpoint data through a shared volume (`volumes_from: agent-provisioning`).
+
+<Note>
+  Agent provisioning requires access to the Docker daemon on the host. The Docker socket (`/var/run/docker.sock`) must be mounted into the `agent-provisioning` container. Agent containers are launched on the same Docker host as the platform.
+</Note>
+
+## How agents are spun up
+
+When an organization requests wallet provisioning, `AgentProvisioningService.walletProvision()` constructs a shell command that invokes one of the provisioning scripts:
+
+- `docker_start_agent.sh` — used when running inside Docker (the standard path)
+- `start_agent.sh` — used when running directly on the host
+
+The script performs the following steps:
+
+1. Allocates the next available admin port (starting from `8001`, tracked in `agent-provisioning/AFJ/port-file/last-admin-port.txt`) and inbound port (starting from `9001`, tracked in `agent-provisioning/AFJ/port-file/last-inbound-port.txt`)
+2. Writes a JSON agent config file to `agent-provisioning/AFJ/agent-config/<orgId>_<containerName>.json`
+3. Generates a Docker Compose file at `agent-provisioning/AFJ/docker-compose_<orgId>_<containerName>.yaml`
+4. Runs `docker compose up -d` to start the agent container
+5. Polls `http://<externalIp>:<adminPort>/agent` up to 6 times (10-second intervals) until it returns HTTP 200
+6. Writes the agent endpoint to `agent-provisioning/AFJ/endpoints/<orgId>_<containerName>.json`
+
+## Required configuration
+
+<Warning>
+  The following environment variables must be set in `.env` before agent provisioning will work. Missing values will cause wallet provisioning requests to fail.
+</Warning>
+
+| Variable | Example | Description |
+|---|---|---|
+| `AGENT_HOST` | `username@0.0.0.0` | SSH connection string for the VM running the agents |
+| `AFJ_VERSION` | `afj-0.4.1:latest` | Docker image tag for Credo agent containers |
+| `AFJ_AGENT_SPIN_UP` | `/apps/agent-provisioning/AFJ/scripts/start_agent.sh` | Path to the agent spin-up script inside the container |
+| `AFJ_AGENT_ENDPOINT_PATH` | `/apps/agent-provisioning/AFJ/endpoints/` | Directory where agent endpoint JSON files are written |
+| `AGENT_PROTOCOL` | `http` | Transport protocol used by agents (`http` or `https`) |
+| `AGENT_API_KEY` | `supersecret-that-too-16chars` | API key injected into every agent container |
+| `WALLET_STORAGE_HOST` | `localhost` | PostgreSQL host for agent wallets (use host IP, not `localhost`) |
+| `WALLET_STORAGE_PORT` | `5432` | PostgreSQL port for agent wallets |
+| `WALLET_STORAGE_USER` | `postgres` | PostgreSQL user for agent wallets |
+| `WALLET_STORAGE_PASSWORD` | `xxxxxx` | PostgreSQL password for agent wallets |
+| `SCHEMA_FILE_SERVER_URL` | — | URL of the schema file server, passed to each agent |
+
+In Docker Compose, `ROOT_PATH` is also set as an environment variable on the container and passed to the spin-up script:
+
+```yaml docker-compose.yml (agent-provisioning excerpt)
+environment:
+  - ROOT_PATH=$PWD/apps/agent-provisioning/AFJ/agent-config
+```
+
+## Volume mounts
+
+The `agent-provisioning` service requires the following mounts:
+
+```yaml docker-compose.yml
+volumes:
+  - $PWD/apps/agent-provisioning/AFJ/agent-config:/app/agent-provisioning/AFJ/agent-config
+  - /var/run/docker.sock:/var/run/docker.sock
+  - /app/agent-provisioning/AFJ/token:/app/agent-provisioning/AFJ/token
+  - $PWD/agent.env:/app/agent.env
+```
+
+| Mount | Purpose |
+|---|---|
+| `agent-config/` | JSON config files read by each agent container at startup |
+| `/var/run/docker.sock` | Allows the service to launch agent containers on the host |
+| `token/` | Persists agent API tokens across container restarts |
+| `agent.env` | Environment file injected into every spawned agent container |
+
+The `agent-service` inherits the same volumes through `volumes_from`:
+
+```yaml docker-compose.yml
+agent-service:
+  volumes_from:
+    - agent-provisioning
+```
+
+This gives `agent-service` read access to the `agent-config` and `endpoints` directories without duplicating the mount configuration.
+
+## AFJ directory structure
+
+Inside the `agent-provisioning` container, the AFJ working directory is structured as follows:
+
+```
+/app/agent-provisioning/AFJ/
+├── agent-config/              # Per-org agent JSON config files
+│   └── <orgId>_<container>.json
+├── endpoints/                 # Per-org endpoint JSON files
+│   └── <orgId>_<container>.json
+├── port-file/                 # Port allocation state
+│   ├── last-admin-port.txt    # Last allocated admin port (starts at 8001)
+│   └── last-inbound-port.txt  # Last allocated inbound port (starts at 9001)
+├── scripts/
+│   ├── start_agent.sh         # Host-side provisioning script
+│   ├── docker_start_agent.sh  # Docker-side provisioning script
+│   ├── start_agent_ecs.sh     # ECS provisioning script
+│   ├── on_premises_agent.sh   # On-premises provisioning script
+│   └── fargate.sh             # AWS Fargate provisioning script
+└── docker-compose_<orgId>_<container>.yaml  # Generated per-org compose files
+```
+
+## Agent configuration file
+
+Each organization's agent config is written to `agent-config/<orgId>_<containerName>.json`. The structure matches the Credo REST API configuration format:
+
+```json
+{
+  "label": "<orgId>_<containerName>",
+  "walletId": "<walletName>",
+  "walletKey": "<walletPassword>",
+  "walletType": "postgres",
+  "walletUrl": "<WALLET_STORAGE_HOST>:<WALLET_STORAGE_PORT>",
+  "walletAccount": "<WALLET_STORAGE_USER>",
+  "walletPassword": "<WALLET_STORAGE_PASSWORD>",
+  "walletAdminAccount": "<WALLET_STORAGE_USER>",
+  "walletAdminPassword": "<WALLET_STORAGE_PASSWORD>",
+  "walletScheme": "DatabasePerWallet",
+  "indyLedger": [...],
+  "endpoint": ["<AGENT_ENDPOINT>"],
+  "autoAcceptConnections": true,
+  "autoAcceptCredentials": "contentApproved",
+  "autoAcceptProofs": "contentApproved",
+  "logLevel": 2,
+  "inboundTransport": [{ "transport": "<protocol>", "port": <inboundPort> }],
+  "outboundTransport": ["<protocol>"],
+  "webhookUrl": "<webhookEndpoint>/wh/<orgId>",
+  "adminPort": <adminPort>,
+  "tenancy": <true|false>,
+  "schemaFileServerURL": "<SCHEMA_FILE_SERVER_URL>",
+  "apiKey": "<AGENT_API_KEY>"
+}
+```
+
+## agent.env
+
+The `agent.env` file is mounted into every spawned agent container at `/app/agent.env`. Create this file in the root of the repository before starting the platform:
+
+```bash
+touch agent.env
+```
+
+Populate it with wallet storage credentials and any other values the Credo image requires:
+
+```ini agent.env
+WALLET_STORAGE_HOST=<postgres-host-ip>
+WALLET_STORAGE_PORT=5432
+WALLET_STORAGE_USER=postgres
+WALLET_STORAGE_PASSWORD=<password>
+```
+
+<Warning>
+  Do not use `localhost` or `127.0.0.1` for `WALLET_STORAGE_HOST` in `agent.env`. Agent containers run on the Docker network and must use the host machine's LAN IP or a resolvable hostname to reach PostgreSQL.
+</Warning>
+
+## Port allocation
+
+Admin and inbound ports are allocated sequentially and tracked in plain-text files:
+
+| File | Starting value | Purpose |
+|---|---|---|
+| `port-file/last-admin-port.txt` | `8001` | HTTP admin API port for each agent |
+| `port-file/last-inbound-port.txt` | `9001` | DIDComm inbound transport port for each agent |
+
+Each time a new agent is provisioned, the script increments the value in these files by 1 and exposes both ports on the host. The first agent receives admin port `8002` and inbound port `9002`.
+
+Both ports are published on the host and on the agent container:
+
+```yaml generated docker-compose (per agent)
+ports:
+  - <inboundPort>:<inboundPort>
+  - <adminPort>:<adminPort>
+```
+
+## Verifying an agent is running
+
+After provisioning succeeds, confirm the agent container is up and responding:
+
+<Steps>
+  <Step title="List running agent containers">
+    ```bash
+    docker ps --filter "name=<orgId>"
+    ```
+  </Step>
+
+  <Step title="Check the agent admin endpoint">
+    ```bash
+    curl http://<AGENT_HOST_IP>:<adminPort>/agent
+    ```
+
+    A successful response returns HTTP `200` with agent metadata. This is the same check the provisioning script performs internally.
+  </Step>
+
+  <Step title="Inspect the endpoint file">
+    The provisioning script writes the agent's controller endpoint to:
+
+    ```
+    agent-provisioning/AFJ/endpoints/<orgId>_<containerName>.json
+    ```
+
+    Its contents look like:
+
+    ```json
+    {
+      "CONTROLLER_ENDPOINT": "<externalIp>:<adminPort>"
+    }
+    ```
+
+    `agent-service` reads this file to discover where to send requests for each organization.
+  </Step>
+
+  <Step title="View agent logs">
+    ```bash
+    docker logs <orgId>_<containerName>
+    ```
+  </Step>
+</Steps>

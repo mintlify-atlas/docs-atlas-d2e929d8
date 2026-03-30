@@ -1,0 +1,106 @@
+---
+title: "Authentication overview"
+description: "How to authenticate with the CREDEBL Platform API using Bearer JWT tokens."
+---
+
+The CREDEBL Platform API uses JSON Web Tokens (JWT) for authentication. Every protected endpoint requires a valid Bearer token in the `Authorization` header.
+
+## Base URL
+
+```
+http://localhost:5000/api
+```
+
+In production, replace `localhost:5000` with your configured `API_GATEWAY_HOST` and `API_GATEWAY_PORT`.
+
+## Getting started
+
+<Steps>
+  <Step title="Register your account">
+    Send your email to `POST /auth/verification-mail`. The platform sends a verification code to that address.
+  </Step>
+  <Step title="Verify your email">
+    Call `GET /auth/verify` with your email and the verification code you received.
+  </Step>
+  <Step title="Complete your profile">
+    Submit your name, password, and other details to `POST /auth/signup`.
+  </Step>
+  <Step title="Sign in">
+    Call `POST /auth/signin` with your email and password. The response contains an `access_token` and a `refresh_token`.
+  </Step>
+  <Step title="Call protected endpoints">
+    Include the `access_token` in every subsequent request as a Bearer token.
+
+    ```bash
+    curl -H "Authorization: Bearer <your-jwt-token>" \
+      http://localhost:5000/v1/orgs
+    ```
+  </Step>
+</Steps>
+
+## Including the token in requests
+
+Pass the JWT in the `Authorization` header using the `Bearer` scheme.
+
+<CodeGroup>
+
+```bash curl
+curl --request GET \
+  --url http://localhost:5000/v1/orgs \
+  --header "Authorization: Bearer <your-jwt-token>"
+```
+
+```javascript JavaScript (fetch)
+const response = await fetch('http://localhost:5000/v1/orgs', {
+  headers: {
+    Authorization: 'Bearer <your-jwt-token>',
+  },
+});
+```
+
+```python Python (requests)
+import requests
+
+response = requests.get(
+    'http://localhost:5000/v1/orgs',
+    headers={'Authorization': 'Bearer <your-jwt-token>'}
+)
+```
+
+</CodeGroup>
+
+## Token format and expiry
+
+Tokens are standard JWTs signed with RS256. The `expires_in` field in the sign-in response indicates how many seconds until the token expires (for example, `86400` for 24 hours).
+
+<Note>
+  Store tokens securely. Never expose them in URLs, logs, or client-side source
+  code.
+</Note>
+
+## Refreshing tokens
+
+When your access token expires, use `POST /auth/refresh-token` with the `refreshToken` you received at sign-in to obtain a new access token without requiring the user to sign in again. See the [login and session](/api-reference/auth/login) page for full details.
+
+## Multi-client support
+
+Some endpoints that initiate user flows (such as sending a verification email) accept an optional `clientAlias` query parameter. This allows the platform to customise email branding and redirect URLs for different front-end clients deployed against the same API.
+
+Use `GET /auth/clientAliases` to retrieve the list of valid aliases configured on your deployment.
+
+```bash
+curl http://localhost:5000/v1/auth/clientAliases
+```
+
+## Authentication errors
+
+| Status | Meaning |
+|--------|---------|
+| `401 Unauthorized` | The request has no token, the token is malformed, or the token has expired. |
+| `403 Forbidden` | The token is valid but the caller does not have the required role or organisation permission for the requested resource. |
+
+<Warning>
+  A `403 Forbidden` response does not mean the token is invalid — it means the
+  authenticated user lacks the necessary permissions. Requesting a new token
+  will not resolve a permissions error.
+</Warning>

@@ -1,28 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "name": "CREDEBL Platform",
+  "projectType": "api-service",
+  "projectName": "CREDEBL Platform",
+  "projectDescription": "An open-source, microservices-based platform for decentralized identity and verifiable credentials built on W3C DID/VC standards and Hyperledger Aries.",
   "theme": "luma",
-  "colors": {
-    "primary": "#1c64ec",
-    "light": "#ffffff",
-    "dark": "#1c64ec"
-  },
-  "favicon": "https://media.brand.dev/4155d945-6a5e-41de-a5e5-fda12b9f868a.png",
-  "logo": {
-    "light": "https://media.brand.dev/70b72158-03b3-46dc-bfcf-4b2d01a43703.svg",
-    "dark": "https://media.brand.dev/70b72158-03b3-46dc-bfcf-4b2d01a43703.svg"
-  },
-  "navbar": {
-    "primary": {
-      "type": "github",
-      "href": "https://github.com/credebl/platform"
-    }
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/credebl/platform"
-    }
-  },
+  "primaryColor": "#1c64ec",
+  "lightColor": "#ffffff",
+  "darkColor": null,
   "navigation": {
     "tabs": [
       {
@@ -104,5 +87,36 @@
         ]
       }
     ]
-  }
+  },
+  "keyFeatures": [
+    "Decentralized Identity (W3C DID) management with multi-ledger support",
+    "Verifiable Credentials issuance and verification (W3C VC, AnonCreds)",
+    "OID4VC and OID4VP protocol support for interoperable credential exchange",
+    "Organization-based multi-tenant architecture with role-based access control",
+    "Trust ecosystems for multi-party credential governance",
+    "Cloud wallet for holder-side credential management",
+    "Agent provisioning and management via Hyperledger Aries/Credo",
+    "Microservices architecture with NATS messaging for inter-service communication",
+    "Webhook support for event-driven integrations",
+    "OpenTelemetry observability and structured logging"
+  ],
+  "publicApiSurface": [
+    "POST /auth/signup — Register a new user",
+    "POST /auth/login — Authenticate and obtain JWT",
+    "GET /orgs — List all organizations",
+    "POST /orgs — Create an organization",
+    "POST /orgs/:orgId/connections — Create a DIDComm connection invitation",
+    "GET /orgs/:orgId/connections — List connections for an organization",
+    "POST /orgs/:orgId/schemas — Create a credential schema",
+    "GET /orgs/:orgId/schemas — List schemas",
+    "POST /orgs/:orgId/credential-definitions — Create a credential definition",
+    "POST /orgs/:orgId/credentials/offer — Issue a verifiable credential",
+    "POST /orgs/:orgId/proofs — Request a proof presentation",
+    "GET /orgs/:orgId/verified-proofs — List verified proof presentations",
+    "POST /ecosystem/invitation — Invite an organization to an ecosystem",
+    "POST /cloud-wallet/create — Create a cloud wallet for a holder",
+    "POST /cloud-wallet/credentials/accept — Accept a credential offer in cloud wallet",
+    "POST /cloud-wallet/proofs/accept — Accept a proof request in cloud wallet",
+    "POST /webhook/:orgId — Configure webhook URL for an organization"
+  ]
 }

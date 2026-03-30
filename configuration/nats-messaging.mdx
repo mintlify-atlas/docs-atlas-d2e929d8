@@ -1,0 +1,235 @@
+---
+title: "NATS Messaging"
+description: "Configure NATS for inter-service communication between CREDEBL platform microservices."
+---
+
+CREDEBL uses [NATS](https://nats.io) as its inter-service message bus. Every microservice connects to NATS as a queue-group subscriber identified by its service name. The API Gateway connects as a client to dispatch requests, and each downstream service processes messages from its own named queue.
+
+The platform also uses **NATS JetStream** for durable event streams (aggregate events and DID notifications).
+
+---
+
+## NATS server setup
+
+The repository ships a minimal `nats-server.conf`:
+
+```conf nats-server.conf
+port: 4222           # Main port for NATS communication
+max_payload: 4194304 # 4 MB in bytes
+
+websocket {
+  port: 443
+  no_tls: true       # WebSocket on port 443 without TLS
+}
+```
+
+<Note>
+  The `no_tls: true` setting is suitable for local development and private networks. In production, configure TLS termination at a load balancer or enable TLS directly in `nats-server.conf`.
+</Note>
+
+### Docker Compose
+
+Run a NATS server alongside the platform services:
+
+```yaml docker-compose.yml
+services:
+  nats:
+    image: nats:latest
+    ports:
+      - "4222:4222"
+      - "443:443"
+    volumes:
+      - ./nats-server.conf:/etc/nats/nats-server.conf
+    command: ["-c", "/etc/nats/nats-server.conf"]
+```
+
+Set the corresponding environment variables to point services at the container:
+
+```bash .env
+NATS_HOST=0.0.0.0
+NATS_PORT=4222
+NATS_URL=nats://0.0.0.0:4222
+```
+
+---
+
+## Authentication types
+
+The auth type is controlled by `NATS_AUTH_TYPE`. The same value applies to every microservice unless overridden by `NOTIFICATION_NATS_AUTH_TYPE` for the notification service.
+
+<Tabs>
+  <Tab title="nkey (default)">
+    Each service authenticates with its own NKey seed. This is the recommended method for production deployments.
+
+    ```bash .env
+    NATS_AUTH_TYPE=nkey
+
+    API_GATEWAY_NKEY_SEED=SUACSSL3UAHUDXKFSNVUZRF5UHPMWZ6BFDTJ7M6USDXV3WHAJT4UJFILJ4E
+    USER_NKEY_SEED=SUACSSL3UAHUDXKFSNVUZRF5UHPMWZ6BFDTJ7M6USDXV3WHAJT4UJFILJ5E
+    ORGANIZATION_NKEY_SEED=SUACSSL3UAHUDXKFSNVUZRF5UHPMWZ6BFDTJ7M6USDXV3WHAJT4UJFILJ6E
+    # ... one seed per service
+    ```
+
+    The `getNatsOptions` helper in `libs/common/src/nats.config.ts` encodes each seed with `TextEncoder` and passes it to `nkeyAuthenticator`.
+
+    <Warning>
+      NKey seeds are private credentials. Generate a unique seed per service and rotate them if any seed is ever exposed.
+    </Warning>
+  </Tab>
+  <Tab title="creds">
+    A single `.creds` file is used for all services. Suitable for operator-managed NATS accounts.
+
+    ```bash .env
+    NATS_AUTH_TYPE=creds
+    NATS_CREDS_FILE=/platform/app_user.creds
+    ```
+
+    The file is read at startup with `readFileSync` and passed to `credsAuthenticator`. The path must be accessible inside the container or on the host running the service.
+
+    <Warning>
+      The `.creds` file contains a private NKey seed and a signed user JWT. Restrict filesystem permissions to `600` and never commit it to source control.
+    </Warning>
+  </Tab>
+  <Tab title="usernamePassword">
+    All services authenticate with a shared username and password.
+
+    ```bash .env
+    NATS_AUTH_TYPE=usernamePassword
+    NATS_USER=platform-service
+    NATS_PASSWORD=<strong-password>
+    ```
+
+    The server must have `authorization` configured with matching credentials in `nats-server.conf`:
+
+    ```conf nats-server.conf
+    authorization {
+      user: platform-service
+      password: <strong-password>
+    }
+    ```
+
+    <Warning>
+      Shared credentials mean all services use the same identity. Prefer `nkey` for per-service isolation.
+    </Warning>
+  </Tab>
+  <Tab title="none">
+    No authentication. The NATS server accepts all connections.
+
+    ```bash .env
+    NATS_AUTH_TYPE=none
+    ```
+
+    <Warning>
+      Use `none` only in isolated local development environments. Never run an unauthenticated NATS server that is reachable from outside a trusted network.
+    </Warning>
+  </Tab>
+</Tabs>
+
+---
+
+## Reconnection behavior
+
+The platform configures automatic reconnection via the `NATSReconnects` enum (defined in `libs/enum/src/enum.ts`). The `getNatsOptions` function applies:
+
+| Option | Source |
+|---|---|
+| `maxReconnectAttempts` | `NATSReconnects.maxReconnectAttempts` |
+| `reconnectTimeWait` | `NATSReconnects.reconnectTimeWait` |
+
+---
+
+## Service-to-subject mapping
+
+Each microservice registers on NATS as a queue group using its service name constant from `CommonConstants`. The API Gateway acts as the sole publisher; services consume from their respective subjects.
+
+| Service constant | NATS queue name |
+|---|---|
+| `API_GATEWAY_SERVICE` | `api-gateway` |
+| `USER_SERVICE` | `user` |
+| `ORGANIZATION_SERVICE` | `organization` |
+| `AGENT_SERVICE` | `agent-service` |
+| `AGENT_PROVISIONING` | `agent-provisioning` |
+| `ISSUANCE_SERVICE` | `issuance` |
+| `VERIFICATION_SERVICE` | `verification` |
+| `CONNECTION_SERVICE` | `connection` |
+| `SCHEMA_SERVICE` | `schema` |
+| `CREDENTIAL_DEFINITION_SERVICE` | `credential-definition` |
+| `ECOSYSTEM_SERVICE` | `ecosystem` |
+| `UTILITY_SERVICE` | `utilitites` |
+| `GEO_LOCATION_SERVICE` | `geo-location` |
+| `NOTIFICATION_SERVICE` | `notification` |
+| `OIDC4VC_ISSUANCE_SERVICE` | `oid4vc-issuance` |
+| `OIDC4VC_VERIFICATION_SERVICE` | `oid4vc-verification` |
+| `X509_SERVICE` | `x509-service` |
+
+---
+
+## JetStream configuration
+
+JetStream provides durable, at-least-once delivery for event streams. Configure the stream names and consumer behavior with the following variables.
+
+<ParamField body="AGGREGATE_STREAM" type="string">
+  Name of the JetStream stream that carries aggregate domain events. Default: `aggregate`.
+</ParamField>
+
+<ParamField body="DID_STREAM" type="string">
+  Name of the JetStream stream for DID creation notifications. Default: `did-notify`.
+</ParamField>
+
+<ParamField body="PULL_CONSUMER" type="string">
+  Name of the durable pull consumer attached to the streams above. Default: `hub-pull-consumer`.
+</ParamField>
+
+<ParamField body="CONSUMER_CONFIG_ACK_WAIT" type="number">
+  How long (in nanoseconds) JetStream waits for an acknowledgement before redelivering a message. Default: `10_000`.
+</ParamField>
+
+<ParamField body="CONSUMER_CONFIG_MAX_DELIVER" type="number">
+  Maximum number of delivery attempts before a message is considered dead-lettered. Default: `4`.
+</ParamField>
+
+### Example JetStream environment block
+
+```bash .env
+AGGREGATE_STREAM=aggregate
+DID_STREAM=did-notify
+PULL_CONSUMER=hub-pull-consumer
+CONSUMER_CONFIG_ACK_WAIT=10_000
+CONSUMER_CONFIG_MAX_DELIVER=4
+```
+
+---
+
+## Notification service override
+
+The notification service can use a different NATS auth type than the rest of the platform. This is useful when the notification pathway connects to a separate NATS cluster.
+
+```bash .env
+# All other services
+NATS_AUTH_TYPE=nkey
+
+# Notification service only
+NOTIFICATION_NATS_AUTH_TYPE=usernamePassword
+ENABLE_NATS_NOTIFICATION=true
+```
+
+When `ENABLE_NATS_NOTIFICATION=false` (the default), the NATS notification pathway is disabled regardless of `NOTIFICATION_NATS_AUTH_TYPE`.
+
+---
+
+## How the API Gateway connects
+
+The API Gateway bootstrap in `apps/api-gateway/src/main.ts` connects to NATS as a microservice transport:
+
+```typescript apps/api-gateway/src/main.ts
+app.connectMicroservice<MicroserviceOptions>({
+  transport: Transport.NATS,
+  options: getNatsOptions(
+    CommonConstants.API_GATEWAY_SERVICE,
+    process.env.API_GATEWAY_NKEY_SEED,
+    process.env.NATS_CREDS_FILE
+  )
+});
+```
+
+`getNatsOptions` selects the authenticator based on `NATS_AUTH_TYPE` and assembles the server list from `NATS_URL`. Multiple NATS URLs (for clustering) are supported as comma-separated values.

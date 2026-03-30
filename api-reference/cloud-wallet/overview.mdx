@@ -1,0 +1,533 @@
+---
+title: "Cloud Wallet API"
+description: "Holder-side credential management: create wallets, receive invitations, accept credentials, and respond to proof requests."
+---
+
+## Overview
+
+The Cloud Wallet API provides a **holder-side** interface for managing decentralized identity wallets. Using this API, a user can:
+
+- Create a personal cloud wallet tied to their account.
+- Configure the underlying agent's base wallet.
+- Establish DIDComm connections with issuers and verifiers.
+- Receive and accept verifiable credential offers.
+- Respond to proof presentation requests.
+- Create and manage DIDs within the wallet.
+- Send and receive basic messages over established connections.
+
+All endpoints require a JWT bearer token. The `userId` and `email` are resolved from the authenticated token — they do not need to be included in the request body.
+
+---
+
+## Holder Journey
+
+<Steps>
+  <Step title="Configure base wallet (first-time setup)">
+    Call `POST /configure/base-wallet` with the agent endpoint and credentials to bind the underlying agent wallet to the user's account.
+  </Step>
+  <Step title="Create a cloud wallet">
+    Call `POST /create-wallet` with a wallet label to provision a new tenant wallet for the user.
+  </Step>
+  <Step title="Receive a connection invitation">
+    When an issuer or verifier shares an invitation URL, call `POST /receive-invitation-url` with the `invitationUrl` to establish a DIDComm connection.
+  </Step>
+  <Step title="Accept a credential offer">
+    Once a connection exists, an issuer can offer a credential. Call `POST /accept-offer` with the `credentialRecordId` and desired `autoAcceptCredential` behavior to accept it.
+  </Step>
+  <Step title="Respond to a proof request">
+    When a verifier requests a proof, call `POST /proofs/accept-request` with the `proofRecordId` to present the matching credential.
+  </Step>
+</Steps>
+
+---
+
+## Endpoints
+
+### Configure Base Wallet
+
+Configures the base agent wallet for the authenticated user. This is a one-time setup step required before creating a cloud wallet.
+
+<ParamField body="walletKey" type="string" required>
+  The wallet encryption key used by the agent.
+</ParamField>
+
+<ParamField body="apiKey" type="string" required>
+  API key for authenticating with the agent endpoint.
+</ParamField>
+
+<ParamField body="agentEndpoint" type="string" required>
+  The agent's base URL. Must be a valid `protocol://host:port` or domain (e.g., `http://0.0.0.0:4001`).
+</ParamField>
+
+```bash
+curl -X POST https://localhost:5000/v1/configure/base-wallet \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "walletKey": "xxx-xxxx-xxxx",
+    "apiKey": "xxx-xxxx-xxxx",
+    "agentEndpoint": "http://0.0.0.0:4001"
+  }'
+```
+
+<ResponseField name="statusCode" type="number">
+  `201` on success.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable result message.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Configuration result from the agent.
+</ResponseField>
+
+---
+
+### Create Cloud Wallet
+
+Provisions a new cloud wallet for the authenticated user.
+
+<ParamField body="label" type="string" required>
+  Display label for the wallet (e.g., `"Credential Wallet"`). Must not be empty.
+</ParamField>
+
+<ParamField body="connectionImageUrl" type="string">
+  Optional URL for the wallet's profile image (e.g., `"https://picsum.photos/200"`).
+</ParamField>
+
+```bash
+curl -X POST https://localhost:5000/v1/create-wallet \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "label": "My Credential Wallet",
+    "connectionImageUrl": "https://picsum.photos/200"
+  }'
+```
+
+<ResponseField name="statusCode" type="number">
+  `201` on success.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable result message.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The created wallet object, including the tenant ID.
+</ResponseField>
+
+---
+
+### Create Connection Invitation
+
+Creates a DIDComm out-of-band connection invitation that can be shared with another party.
+
+<ParamField body="label" type="string">
+  Optional human-readable label for the connection.
+</ParamField>
+
+<ParamField body="alias" type="string">
+  Optional alias for identifying this connection locally.
+</ParamField>
+
+<ParamField body="imageUrl" type="string">
+  Optional image URL associated with this connection.
+</ParamField>
+
+<ParamField body="multiUseInvitation" type="boolean">
+  When `true`, the invitation URL can be used by multiple parties.
+</ParamField>
+
+<ParamField body="autoAcceptConnection" type="boolean">
+  When `true`, the connection is accepted automatically without manual approval.
+</ParamField>
+
+<ParamField body="goalCode" type="string">
+  Optional goal code describing the intent of the connection.
+</ParamField>
+
+<ParamField body="goal" type="string">
+  Optional free-text goal description.
+</ParamField>
+
+<ParamField body="handshake" type="boolean">
+  Whether to include a handshake in the invitation.
+</ParamField>
+
+<ParamField body="handshakeProtocols" type="string[]">
+  Array of handshake protocol URLs (e.g., `["https://didcomm.org/didexchange/1.x"]`).
+</ParamField>
+
+<ParamField body="invitationDid" type="string">
+  Optional DID to use in the invitation.
+</ParamField>
+
+<ParamField body="recipientKey" type="string">
+  Optional recipient verification key.
+</ParamField>
+
+```bash
+curl -X POST https://localhost:5000/v1/connections/invitation \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "label": "CREDEBL Issuer",
+    "multiUseInvitation": false,
+    "autoAcceptConnection": true
+  }'
+```
+
+---
+
+### Get All Connections
+
+Returns all DIDComm connections for the authenticated user's wallet, with optional filters.
+
+<ParamField query="outOfBandId" type="string">
+  Filter by the out-of-band invitation ID (e.g., `e315f30d-9beb-4068-aea4-abb5fe5eecb1`).
+</ParamField>
+
+<ParamField query="alias" type="string">
+  Filter connections by alias (e.g., `Test`).
+</ParamField>
+
+<ParamField query="myDid" type="string">
+  Filter by the local DID used in the connection.
+</ParamField>
+
+<ParamField query="theirDid" type="string">
+  Filter by the remote party's DID.
+</ParamField>
+
+<ParamField query="theirLabel" type="string">
+  Filter by the remote party's label (e.g., `Bob`).
+</ParamField>
+
+```bash
+curl -X GET "https://localhost:5000/v1/connections?theirLabel=Acme+Corp" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Get Connection by ID
+
+Retrieves details for a specific connection.
+
+<ParamField path="connectionId" type="string" required>
+  The connection record ID.
+</ParamField>
+
+```bash
+curl -X GET https://localhost:5000/v1/connection/e315f30d-9beb-4068-aea4-abb5fe5eecb1 \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Receive Invitation by URL
+
+Accepts an out-of-band invitation URL to establish a new DIDComm connection.
+
+<ParamField body="invitationUrl" type="string" required>
+  The full invitation URL received from the inviting party.
+</ParamField>
+
+<ParamField body="alias" type="string">
+  Optional alias to assign to this connection.
+</ParamField>
+
+<ParamField body="label" type="string">
+  Optional label to assign to this connection.
+</ParamField>
+
+<ParamField body="imageUrl" type="string">
+  Optional image URL to associate with this connection.
+</ParamField>
+
+<ParamField body="autoAcceptConnection" type="boolean">
+  When `true`, automatically accepts the connection without a separate confirmation step.
+</ParamField>
+
+<ParamField body="autoAcceptInvitation" type="boolean">
+  When `true`, automatically accepts the invitation.
+</ParamField>
+
+<ParamField body="reuseConnection" type="boolean">
+  When `true`, reuses an existing connection if one already exists with the inviting party.
+</ParamField>
+
+<ParamField body="acceptInvitationTimeoutMs" type="integer">
+  Timeout in milliseconds to wait for the invitation to be accepted.
+</ParamField>
+
+<ParamField body="ourDid" type="string">
+  Optional local DID to use when establishing the connection.
+</ParamField>
+
+```bash
+curl -X POST https://localhost:5000/v1/receive-invitation-url \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "invitationUrl": "https://agent.example.com?oob=eyJAdHlwZSI6...",
+    "autoAcceptConnection": true,
+    "autoAcceptInvitation": true
+  }'
+```
+
+---
+
+### Get Credential List
+
+Returns all credentials in the wallet, with optional filters.
+
+<ParamField query="threadId" type="string">
+  Filter credentials by DIDComm thread ID.
+</ParamField>
+
+<ParamField query="connectionId" type="string">
+  Filter credentials by the connection they were issued over.
+</ParamField>
+
+<ParamField query="state" type="string">
+  Filter by credential exchange state (e.g., `offer-received`, `credential-issued`, `done`).
+</ParamField>
+
+```bash
+curl -X GET "https://localhost:5000/v1/credential?state=done" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Get Credential by Record ID
+
+Retrieves a specific credential record.
+
+<ParamField path="credentialRecordId" type="string" required>
+  The credential exchange record ID.
+</ParamField>
+
+```bash
+curl -X GET https://localhost:5000/v1/credential/4e687079-273b-447b-b9dd-9589c84dc6dd \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Accept Credential Offer
+
+Accepts a pending credential offer in the wallet.
+
+<ParamField body="credentialRecordId" type="string" required>
+  The ID of the credential exchange record to accept.
+</ParamField>
+
+<ParamField body="autoAcceptCredential" type="string" required>
+  Controls acceptance behavior. Enum: `always`, `contentApproved`, `never`.
+</ParamField>
+
+<ParamField body="credentialFormats" type="object" required>
+  Credential format configuration object passed to the agent. Shape depends on the credential format (e.g., AnonCreds, JSON-LD).
+</ParamField>
+
+<ParamField body="comment" type="string">
+  Optional comment to include with the acceptance.
+</ParamField>
+
+```bash
+curl -X POST https://localhost:5000/v1/accept-offer \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "credentialRecordId": "4e687079-273b-447b-b9dd-9589c84dc6dd",
+    "autoAcceptCredential": "always",
+    "credentialFormats": {},
+    "comment": "Accepting the University degree credential"
+  }'
+```
+
+---
+
+### Get Proof Presentations
+
+Returns all proof presentations for the wallet, with an optional thread filter.
+
+<ParamField query="threadId" type="string">
+  Optional DIDComm thread ID to filter proof presentations.
+</ParamField>
+
+```bash
+curl -X GET "https://localhost:5000/v1/proofs?threadId=abc123" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Get Proof by ID
+
+Retrieves a specific proof presentation record.
+
+<ParamField path="proofRecordId" type="string" required>
+  The proof exchange record ID.
+</ParamField>
+
+```bash
+curl -X GET https://localhost:5000/v1/proofs/4e687079-273b-447b-b9dd-9589c84dc6dd \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Accept Proof Request
+
+Submits a proof presentation in response to a verifier's proof request.
+
+<ParamField body="proofRecordId" type="string (UUID)" required>
+  The UUID of the proof exchange record to respond to.
+</ParamField>
+
+<ParamField body="filterByPresentationPreview" type="boolean">
+  When `true`, filters the credentials presented to match the presentation preview. Default: `false`.
+</ParamField>
+
+<ParamField body="filterByNonRevocationRequirements" type="boolean">
+  When `true`, filters credentials by non-revocation requirements. Default: `false`.
+</ParamField>
+
+<ParamField body="comment" type="string">
+  Optional comment to include with the proof presentation.
+</ParamField>
+
+```bash
+curl -X POST https://localhost:5000/v1/proofs/accept-request \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "proofRecordId": "4e687079-273b-447b-b9dd-9589c84dc6dd",
+    "filterByPresentationPreview": false,
+    "filterByNonRevocationRequirements": false,
+    "comment": "Presenting my degree credential"
+  }'
+```
+
+---
+
+### Create DID
+
+Creates a new Decentralized Identifier (DID) in the cloud wallet.
+
+<ParamField body="keyType" type="string" required>
+  The cryptographic key type for the DID (e.g., `ed25519`).
+</ParamField>
+
+<ParamField body="method" type="string" required>
+  The DID method (e.g., `indy`, `key`, `web`).
+</ParamField>
+
+<ParamField body="seed" type="string">
+  Optional 32-character seed for deterministic DID generation. Spaces are not allowed.
+</ParamField>
+
+<ParamField body="network" type="string">
+  Optional network identifier (e.g., `bcovrin:testnet`). Required for ledger-based DID methods.
+</ParamField>
+
+<ParamField body="domain" type="string">
+  Optional domain for `did:web` (e.g., `www.github.com`).
+</ParamField>
+
+<ParamField body="role" type="string">
+  Optional endorser role on the ledger (e.g., `endorser`).
+</ParamField>
+
+<ParamField body="privatekey" type="string">
+  Optional private key in hex format (e.g., `651727dab6dfdbb4f18afff5f368d13b0dca41fd26bd5e1c7953457524d645e6`).
+</ParamField>
+
+<ParamField body="endpoint" type="string">
+  Optional DID endpoint URL.
+</ParamField>
+
+<ParamField body="did" type="string">
+  Optional existing DID identifier to import (e.g., `XzFjo1RTZ2h9UVFCnPUyaQ`).
+</ParamField>
+
+<ParamField body="endorserDid" type="string">
+  Optional endorser DID for ledger registration (e.g., `did:indy:bcovrin:testnet:UEeW111G1tYo1nEkPwMcF`).
+</ParamField>
+
+```bash
+curl -X POST https://localhost:5000/v1/did \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "keyType": "ed25519",
+    "method": "indy",
+    "seed": "000000000000000000000000000Seed1",
+    "network": "bcovrin:testnet"
+  }'
+```
+
+---
+
+### Get DID List
+
+Returns all DIDs registered in the authenticated user's cloud wallet.
+
+```bash
+curl -X GET https://localhost:5000/v1/did \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Send Basic Message
+
+Sends a plaintext basic message to a connected party over an established DIDComm connection.
+
+<ParamField path="connectionId" type="string" required>
+  The ID of the connection to send the message over.
+</ParamField>
+
+<ParamField body="content" type="string" required>
+  The text content of the message.
+</ParamField>
+
+```bash
+curl -X POST https://localhost:5000/v1/basic-message/e315f30d-9beb-4068-aea4-abb5fe5eecb1 \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "Hello! Your credential has been issued."
+  }'
+```
+
+---
+
+### Get Basic Messages by Connection ID
+
+Retrieves all basic messages exchanged on a specific connection.
+
+<ParamField path="connectionId" type="string" required>
+  The ID of the connection whose messages to retrieve.
+</ParamField>
+
+```bash
+curl -X GET https://localhost:5000/v1/basic-message/e315f30d-9beb-4068-aea4-abb5fe5eecb1 \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+## Error Responses
+
+| Status | Meaning |
+|---|---|
+| `400 Bad Request` | Invalid request body or parameters (e.g., seed too long, invalid URL). |
+| `401 Unauthorized` | JWT token missing or expired. |
+| `403 Forbidden` | The user does not have permission to perform this action. |
+| `404 Not Found` | The requested credential, proof, connection, or DID record does not exist. |

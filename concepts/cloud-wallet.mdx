@@ -1,0 +1,237 @@
+---
+title: "Cloud Wallet"
+description: "CREDEBL's managed cloud wallet for credential holders — creating a wallet, receiving credentials, responding to proof requests, and managing connections."
+---
+
+The **cloud wallet** is a managed wallet service in CREDEBL designed for **credential holders** — individuals or systems that receive, store, and present verifiable credentials. Unlike an organization wallet (which is provisioned alongside an agent for issuance and verification), the cloud wallet is a lightweight, user-scoped wallet managed entirely by the CREDEBL platform.
+
+## Org wallet vs. cloud wallet
+
+| | Organization Wallet | Cloud Wallet |
+|-|---------------------|--------------|
+| **Purpose** | Issue credentials, request proofs | Hold and present credentials |
+| **User type** | Organizations (issuers, verifiers) | Individual holders |
+| **DID scope** | Tied to the organization's agent | Tied to the individual user |
+| **Provisioning** | Agent spin-up with ledger registration | Lightweight wallet creation |
+| **Wallet type** | `CLOUD_BASE_WALLET` or `CLOUD_SUB_WALLET` | `CLOUD_SUB_WALLET` |
+
+The `CloudWalletType` enum defines two wallet types:
+- `CLOUD_BASE_WALLET` — the base wallet configured by a platform operator
+- `CLOUD_SUB_WALLET` — an individual user's wallet derived from the base wallet
+
+## Cloud wallet capabilities
+
+<CardGroup cols={2}>
+  <Card title="Receive credentials" icon="inbox">
+    Accept credential offers from issuers via OOB invitation URLs or by accepting offers directly with a credential record ID.
+  </Card>
+  <Card title="Store credentials" icon="database">
+    Credentials received and accepted are stored in the wallet and can be listed and retrieved by credential record ID.
+  </Card>
+  <Card title="Present proofs" icon="shield-check">
+    Respond to proof requests from verifiers by submitting a proof presentation from stored credentials.
+  </Card>
+  <Card title="Manage connections" icon="link">
+    Create connection invitations, receive invitations via URL, and manage existing connections by ID.
+  </Card>
+  <Card title="Manage DIDs" icon="fingerprint">
+    Create DIDs within the cloud wallet and list all DIDs associated with the wallet.
+  </Card>
+  <Card title="Basic messaging" icon="message-circle">
+    Send and receive basic DIDComm messages over existing connections.
+  </Card>
+</CardGroup>
+
+## Creating a cloud wallet
+
+Before creating individual user wallets, a platform operator must configure the **base wallet**. The base wallet provides the cloud infrastructure that individual (sub) wallets are derived from.
+
+### Configure the base wallet
+
+```http
+POST /configure/base-wallet
+Authorization: Bearer <token>
+
+{
+  "walletKey": "<wallet-encryption-key>",
+  "connectionImageUrl": "https://example.com/agent-avatar.png"
+}
+```
+
+### Create a user wallet
+
+Each authenticated user can create their own cloud wallet:
+
+```http
+POST /create-wallet
+Authorization: Bearer <token>
+
+{
+  "label": "My Credential Wallet",
+  "connectionImageUrl": "https://picsum.photos/200"
+}
+```
+
+The `label` field identifies the wallet in DIDComm connections. The authenticated user's email and ID are automatically bound to the wallet.
+
+<Note>
+The cloud wallet endpoints use the `UserRoleGuard`, which requires the user to have the `HOLDER` user role (`UserRole.HOLDER`). A user with `DEFAULT_USER` role must be promoted to `HOLDER` before creating a cloud wallet.
+</Note>
+
+## Receiving a credential offer
+
+When an issuer sends a credential via an OOB invitation URL (for example, from a QR code or email link), the holder receives it by submitting the URL to their cloud wallet:
+
+<Steps>
+  <Step title="Receive the invitation URL">
+    Submit the OOB invitation URL to create a connection:
+
+    ```http
+    POST /receive-invitation-url
+    Authorization: Bearer <token>
+
+    {
+      "invitationUrl": "https://issuer.example.com?oob=eyJAdHlwZSI6...",
+      "autoAcceptConnection": true,
+      "autoAcceptInvitation": true
+    }
+    ```
+
+    Optional parameters control connection reuse (`reuseConnection`), timeout (`acceptInvitationTimeoutMs`), and the local DID to use for the connection (`ourDid`).
+  </Step>
+  <Step title="Accept the credential offer">
+    Once the connection is established and the credential offer arrives, accept it:
+
+    ```http
+    POST /accept-offer
+    Authorization: Bearer <token>
+
+    {
+      "credentialRecordId": "<credential-record-id>",
+      "autoAcceptCredential": "always",
+      "credentialFormats": {}
+    }
+    ```
+
+    The `autoAcceptCredential` field accepts `always`, `contentApproved`, or `never` (from the `AutoAccept` enum).
+  </Step>
+  <Step title="Retrieve the stored credential">
+    List all credentials in the wallet or retrieve a specific one by record ID:
+
+    ```http
+    GET /credential
+    GET /credential/:credentialRecordId
+    ```
+
+    Query parameters for listing: `threadId`, `connectionId`, `state`.
+  </Step>
+</Steps>
+
+## Responding to a proof request
+
+When a verifier sends a proof request to the holder's cloud wallet:
+
+<Steps>
+  <Step title="View the proof request">
+    List all proof presentations or retrieve a specific one by ID:
+
+    ```http
+    GET /proofs
+    GET /proofs/:proofRecordId
+    ```
+
+    Optional: filter by `threadId`.
+  </Step>
+  <Step title="Accept and send the proof">
+    Submit a proof presentation in response to the request:
+
+    ```http
+    POST /proofs/accept-request
+    Authorization: Bearer <token>
+
+    {
+      "proofRecordId": "<proof-record-id>",
+      "filterByPresentationPreview": true,
+      "comment": "Presenting employee credentials"
+    }
+    ```
+  </Step>
+</Steps>
+
+## Managing connections
+
+The cloud wallet maintains a list of all DIDComm connections established with issuers and verifiers.
+
+### Create a connection invitation
+
+Generate a connection invitation that another agent can accept:
+
+```http
+POST /connections/invitation
+Authorization: Bearer <token>
+```
+
+### List all connections
+
+```http
+GET /connections
+```
+
+Optional query parameters: `outOfBandId`, `alias`, `myDid`, `theirDid`, `theirLabel`.
+
+### Get a specific connection
+
+```http
+GET /connection/:connectionId
+```
+
+## Managing DIDs in the cloud wallet
+
+### Create a DID
+
+Create a DID within the cloud wallet using any supported method:
+
+```http
+POST /did
+Authorization: Bearer <token>
+
+{
+  "method": "key",
+  "keyType": "ed25519"
+}
+```
+
+For `did:indy`, add the `network` field (e.g., `"bcovrin:testnet"`). For `did:web`, add the `domain` field.
+
+An optional 32-character `seed` can be provided to generate a deterministic key pair. Spaces are not allowed in the seed value.
+
+### List DIDs
+
+```http
+GET /did
+```
+
+Returns all DIDs registered in the cloud wallet.
+
+## Basic messaging
+
+The cloud wallet supports DIDComm basic messages for communication over established connections.
+
+### Send a message
+
+```http
+POST /basic-message/:connectionId
+Authorization: Bearer <token>
+
+{
+  "content": "Hello from my cloud wallet"
+}
+```
+
+### Retrieve messages
+
+```http
+GET /basic-message/:connectionId
+```
+
+Returns all basic messages exchanged over the specified connection.

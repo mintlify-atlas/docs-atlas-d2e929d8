@@ -1,0 +1,296 @@
+---
+title: "Registration"
+description: "Register a new user account on the CREDEBL Platform."
+---
+
+New accounts require three steps: request an email verification code, verify the email, then complete registration with your personal details.
+
+## Registration flow
+
+<Steps>
+  <Step title="Send a verification email">
+    Call `POST /auth/verification-mail` with the email address you want to register. The platform sends a one-time verification code to that address.
+  </Step>
+  <Step title="Verify your email">
+    Call `GET /auth/verify` with the email and the code from the email. The platform marks the address as verified.
+  </Step>
+  <Step title="Complete registration">
+    Call `POST /auth/signup` with your name, password, and the same email address. The account is created and ready to use.
+  </Step>
+  <Step title="Sign in">
+    Use `POST /auth/signin` to obtain a JWT access token. See [Login and session management](/api-reference/auth/login) for details.
+  </Step>
+</Steps>
+
+---
+
+## Send verification email
+
+`POST /auth/verification-mail`
+
+Sends a verification code to the provided email address. This is the first step in the registration flow.
+
+### Query parameters
+
+<ParamField query="clientAlias" type="string">
+  Optional alias that scopes the verification email to a specific front-end
+  client (for example, `"VERIFIER"`). Use `GET /auth/clientAliases` to retrieve
+  valid values for your deployment. When omitted, the default client is used.
+</ParamField>
+
+### Request body
+
+<ParamField body="email" type="string" required>
+  The email address to verify. Must be a valid email, maximum 256 characters.
+  Leading and trailing whitespace is stripped; the value is lowercased
+  automatically.
+</ParamField>
+
+<ParamField body="brandLogoUrl" type="string">
+  Optional URL of a brand logo to embed in the verification email. Must include
+  a protocol and a valid TLD (for example, `https://example.com/logo.png`).
+</ParamField>
+
+<ParamField body="platformName" type="string">
+  Optional display name of your platform, shown in the verification email body
+  (for example, `"MyPlatform"`).
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url http://localhost:5000/v1/auth/verification-mail \
+  --header "Content-Type: application/json" \
+  --data '{
+    "email": "alice@example.com"
+  }'
+```
+
+```bash curl (with branding)
+curl --request POST \
+  --url "http://localhost:5000/v1/auth/verification-mail?clientAlias=VERIFIER" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "email": "alice@example.com",
+    "brandLogoUrl": "https://example.com/logo.png",
+    "platformName": "MyPlatform"
+  }'
+```
+
+</CodeGroup>
+
+```json 201 response
+{
+  "statusCode": 201,
+  "message": "Verification code sent successfully"
+}
+```
+
+---
+
+## Verify email
+
+`GET /auth/verify`
+
+Validates the verification code sent to the user's email address. Must be called before completing registration.
+
+### Query parameters
+
+<ParamField query="email" type="string" required>
+  The email address to verify. Maximum 256 characters. Lowercased and trimmed
+  automatically.
+</ParamField>
+
+<ParamField query="verificationCode" type="string" required>
+  The verification code received in the email.
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash curl
+curl --request GET \
+  --url "http://localhost:5000/v1/auth/verify?email=alice%40example.com&verificationCode=123456"
+```
+
+</CodeGroup>
+
+```json 200 response
+{
+  "statusCode": 200,
+  "message": "Email verified successfully"
+}
+```
+
+### Error responses
+
+| Status | Description |
+|--------|-------------|
+| `400 Bad Request` | The verification code is invalid or has expired. |
+
+---
+
+## Complete registration
+
+`POST /auth/signup`
+
+Creates the user account. Requires that the email address has already been verified via `GET /auth/verify`.
+
+### Request body
+
+<ParamField body="email" type="string" required>
+  The verified email address. Must be a valid email.
+</ParamField>
+
+<ParamField body="firstName" type="string" required>
+  The user's first name. Minimum 2 characters, maximum 50 characters.
+</ParamField>
+
+<ParamField body="lastName" type="string" required>
+  The user's last name. Minimum 2 characters, maximum 50 characters.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  The password to set for the new account.
+</ParamField>
+
+<ParamField body="isPasskey" type="boolean">
+  Set to `true` to register the account for passkey (FIDO2) authentication
+  instead of a password. Defaults to `false`.
+</ParamField>
+
+<ParamField body="isHolder" type="boolean">
+  Set to `true` to register the account as a credential holder. Defaults to
+  `false`.
+</ParamField>
+
+### Response
+
+<ResponseField name="statusCode" type="number">
+  HTTP status code. `201` on success.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable result message.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The newly created user object.
+</ResponseField>
+
+### Examples
+
+<CodeGroup>
+
+```bash curl (standard account)
+curl --request POST \
+  --url http://localhost:5000/v1/auth/signup \
+  --header "Content-Type: application/json" \
+  --data '{
+    "email": "alice@example.com",
+    "firstName": "Alice",
+    "lastName": "Smith",
+    "password": "S3cureP@ss!"
+  }'
+```
+
+```bash curl (holder account)
+curl --request POST \
+  --url http://localhost:5000/v1/auth/signup \
+  --header "Content-Type: application/json" \
+  --data '{
+    "email": "alice@example.com",
+    "firstName": "Alice",
+    "lastName": "Smith",
+    "password": "S3cureP@ss!",
+    "isHolder": true
+  }'
+```
+
+```bash curl (passkey account)
+curl --request POST \
+  --url http://localhost:5000/v1/auth/signup \
+  --header "Content-Type: application/json" \
+  --data '{
+    "email": "alice@example.com",
+    "firstName": "Alice",
+    "lastName": "Smith",
+    "password": "S3cureP@ss!",
+    "isPasskey": true
+  }'
+```
+
+</CodeGroup>
+
+```json 201 response
+{
+  "statusCode": 201,
+  "message": "User registered successfully",
+  "data": {
+    "id": "d8b9b81b-7232-4a7f-b9d3-4f7226129677",
+    "email": "alice@example.com",
+    "firstName": "Alice",
+    "lastName": "Smith"
+  }
+}
+```
+
+### Error responses
+
+| Status | Description |
+|--------|-------------|
+| `400 Bad Request` | One or more required fields are missing, invalid, or the email has not been verified. |
+| `409 Conflict` | An account with this email address already exists. |
+
+---
+
+## Complete registration flow example
+
+The following sequence shows all three steps together.
+
+<CodeGroup>
+
+```bash step 1 — send verification email
+curl --request POST \
+  --url http://localhost:5000/v1/auth/verification-mail \
+  --header "Content-Type: application/json" \
+  --data '{"email": "alice@example.com"}'
+```
+
+```bash step 2 — verify email
+curl --request GET \
+  --url "http://localhost:5000/v1/auth/verify?email=alice%40example.com&verificationCode=123456"
+```
+
+```bash step 3 — complete signup
+curl --request POST \
+  --url http://localhost:5000/v1/auth/signup \
+  --header "Content-Type: application/json" \
+  --data '{
+    "email": "alice@example.com",
+    "firstName": "Alice",
+    "lastName": "Smith",
+    "password": "S3cureP@ss!"
+  }'
+```
+
+```bash step 4 — sign in
+curl --request POST \
+  --url http://localhost:5000/v1/auth/signin \
+  --header "Content-Type: application/json" \
+  --data '{
+    "email": "alice@example.com",
+    "password": "S3cureP@ss!"
+  }'
+```
+
+</CodeGroup>
+
+<Note>
+  The verification code from step 2 is single-use and time-limited. If it
+  expires, repeat step 1 to receive a new code.
+</Note>

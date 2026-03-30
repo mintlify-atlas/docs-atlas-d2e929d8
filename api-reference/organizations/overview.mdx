@@ -1,0 +1,97 @@
+---
+title: "Organizations"
+description: "Create and manage organizations, members, DIDs, and client credentials on the CREDEBL platform."
+---
+
+Organizations are the central resource in CREDEBL. Every credential schema, DID, issuance workflow, and verification policy belongs to an organization. The Organizations API lets you create organizations, manage membership through invitations, configure decentralized identifiers (DIDs), and generate machine-to-machine client credentials.
+
+## Base path
+
+All endpoints are rooted at `/orgs`.
+
+## Authentication
+
+Every endpoint requires a JWT bearer token unless noted otherwise.
+
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+Tokens are obtained through the authentication flow and passed in the `Authorization` header on every request.
+
+## Role-based access
+
+Most endpoints are gated by the requesting user's role within the target organization. Roles are assigned per-organization and are enforced server-side.
+
+| Role | Value | Description |
+|------|-------|-------------|
+| `owner` | `owner` | Full control. Can delete the org, manage all members, and generate client credentials. |
+| `admin` | `admin` | Can invite members, update org details, and manage roles. |
+| `issuer` | `issuer` | Can issue credentials on behalf of the organization. |
+| `verifier` | `verifier` | Can run verification requests. |
+| `member` | `member` | Read-only access to org resources. |
+| `holder` | `holder` | Can hold credentials issued to them. |
+| `super_admin` | `super_admin` | Platform-level super administrator. |
+| `platform_admin` | `platform_admin` | Platform administrator with cross-org access. |
+
+<Info>
+  Roles are scoped to a single organization. A user can hold different roles in different organizations simultaneously.
+</Info>
+
+## Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Create organization" icon="plus" href="/api-reference/organizations/manage-org#create-organization">
+    `POST /orgs` — Create a new organization.
+  </Card>
+  <Card title="Get organization" icon="building" href="/api-reference/organizations/manage-org#get-organization">
+    `GET /orgs/:orgId` — Retrieve details for a specific organization.
+  </Card>
+  <Card title="List organizations" icon="list" href="/api-reference/organizations/manage-org#list-organizations">
+    `GET /orgs` — List all organizations the authenticated user belongs to.
+  </Card>
+  <Card title="Update organization" icon="pen" href="/api-reference/organizations/manage-org#update-organization">
+    `PUT /orgs/:orgId` — Update organization details.
+  </Card>
+  <Card title="Delete organization" icon="trash" href="/api-reference/organizations/manage-org#delete-organization">
+    `DELETE /orgs/:orgId` — Permanently delete an organization.
+  </Card>
+  <Card title="List organization DIDs" icon="fingerprint" href="/api-reference/organizations/manage-org#list-dids">
+    `GET /orgs/:orgId/dids` — List all DIDs registered to an organization.
+  </Card>
+  <Card title="Set primary DID" icon="star" href="/api-reference/organizations/manage-org#set-primary-did">
+    `PUT /orgs/:orgId/primary-did` — Designate a DID as the primary identifier.
+  </Card>
+  <Card title="Send invitations" icon="envelope" href="/api-reference/organizations/invitations#send-invitations">
+    `POST /orgs/:orgId/invitations` — Invite one or more users to the organization.
+  </Card>
+  <Card title="List invitations" icon="inbox" href="/api-reference/organizations/invitations#list-invitations">
+    `GET /orgs/:orgId/invitations` — List all pending invitations.
+  </Card>
+  <Card title="Delete invitation" icon="x" href="/api-reference/organizations/invitations#delete-invitation">
+    `DELETE /orgs/:orgId/invitations/:invitationId` — Cancel a pending invitation.
+  </Card>
+  <Card title="Update user roles" icon="shield" href="/api-reference/organizations/invitations#update-user-roles">
+    `PUT /orgs/:orgId/user-roles/:userId` — Change a member's roles.
+  </Card>
+  <Card title="Generate client credentials" icon="key" href="/api-reference/organizations/manage-org#generate-client-credentials">
+    `POST /orgs/:orgId/client_credentials` — Generate a client ID and secret for machine-to-machine access.
+  </Card>
+  <Card title="Get client token" icon="lock" href="/api-reference/organizations/manage-org#get-client-token">
+    `POST /orgs/:clientId/token` — Exchange client credentials for an access token.
+  </Card>
+  <Card title="Get org roles" icon="users" href="/api-reference/organizations/manage-org#get-org-roles">
+    `GET /orgs/:orgId/roles` — Retrieve all role definitions for an organization.
+  </Card>
+</CardGroup>
+
+### Additional endpoints
+
+| Method | Path | Description | Required roles |
+|--------|------|-------------|----------------|
+| `GET` | `/orgs/public-profile` | List all organizations with public profiles. Supports pagination. | None |
+| `GET` | `/orgs/public-profiles/:orgSlug` | Get a public organization profile by slug. | None |
+| `GET` | `/orgs/:orgId/users` | List members of an organization. | `owner`, `admin`, `issuer`, `verifier`, `member`, `holder` |
+| `GET` | `/orgs/:orgId/client_credentials` | Fetch the existing client ID and secret for an organization. | `owner`, `admin`, `issuer`, `verifier`, `member` |
+| `GET` | `/orgs/dashboard/:orgId` | Get organization dashboard summary. | `owner`, `admin`, `issuer`, `verifier`, `member` |
+| `GET` | `/orgs/activity-count/:orgId` | Get counts of org-level references. | `owner` |

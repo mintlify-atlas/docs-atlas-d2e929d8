@@ -1,0 +1,123 @@
+---
+title: "Decentralized Identity"
+description: "How CREDEBL implements W3C Decentralized Identifiers (DIDs), supported DID methods, ledger networks, and how organizations manage their DIDs."
+---
+
+A Decentralized Identifier (DID) is a globally unique identifier that an entity controls without relying on a central registry, certificate authority, or identity provider. CREDEBL uses DIDs as the cryptographic foundation for every organization, issuer, and verifier on the platform.
+
+## What is a DID?
+
+A DID is a URI that resolves to a **DID Document** — a JSON-LD document that contains public keys, authentication methods, and service endpoints. The W3C DID Core specification defines the structure; individual **DID methods** define how a particular DID is created, resolved, updated, and deactivated.
+
+A DID looks like:
+
+```text
+did:<method>:<method-specific-identifier>
+```
+
+For example:
+
+```text
+did:indy:bcovrin:testnet:UEeW111G1tYo1nEkPwMcF
+did:key:z6MkpzqRuoMamuHj8YXJNBDu2GrLz3LzinA5t4GiYtYKSv8
+did:web:example.com
+```
+
+## DID Document and cryptographic keys
+
+A DID Document binds the DID to one or more cryptographic key pairs. When an issuer signs a credential or a verifier checks a proof, they resolve the issuer's DID to retrieve the public key and verify the signature.
+
+CREDEBL stores each organization's DIDs in the `org_dids` table. An organization can hold multiple DIDs, one of which is designated as the **primary DID** used for issuance and verification by default.
+
+<Note>
+Only the key types the agent supports can be used when creating a DID. CREDEBL supports `ed25519`, `bls12381g1g2`, `bls12381g1`, `bls12381g2`, `x25519`, `p256`, `p384`, `p521`, and `k256`.
+</Note>
+
+## Supported DID methods
+
+CREDEBL supports the following DID methods, as defined in the `DidMethod` enum:
+
+| Method | Value | Description |
+|--------|-------|-------------|
+| `indy` | `indy` | Anchored on a Hyperledger Indy ledger. Requires a ledger write transaction and an endorser for permissioned networks. |
+| `key` | `key` | Ledger-less. The DID is derived directly from the public key. Suitable for ephemeral or testing use cases. |
+| `web` | `web` | Ledger-less. The DID Document is hosted at a well-known URL on a domain you control. |
+| `polygon` | `polygon` | Anchored on the Polygon blockchain. Used with W3C JSON-LD credentials. |
+
+<Note>
+`did:indy` DIDs require an active agent and ledger registration. `did:key` and `did:web` DIDs are ledger-less and can be created without a network transaction.
+</Note>
+
+## Ledger support
+
+For `did:indy`, CREDEBL supports the following Hyperledger Indy networks:
+
+| Network | Purpose |
+|---------|---------|
+| Bcovrin Testnet | Public test ledger for development and demos |
+| Indicio Testnet | Indicio-hosted test network |
+| Indicio Demonet | Indicio-hosted demonstration network |
+| Indicio Mainnet | Indicio production network |
+
+The `Ledgers` enum in the platform defines these network names. When a DID is not anchored to any ledger (e.g., `did:key` or `did:web`), the network value is `NA` (Not Applicable).
+
+For Polygon-based `did:polygon` DIDs, the platform uses the `polygon:testnet` namespace.
+
+## How DIDs are created in CREDEBL
+
+DIDs are created during **agent provisioning** — the process of spinning up a DWN agent for an organization. The `AgentSpinupDto` accepts the DID creation parameters alongside wallet configuration.
+
+The agent spin-up status tracks three states:
+
+| State | Value | Meaning |
+|-------|-------|---------|
+| `PENDING` | `0` | Agent provisioning has started |
+| `WALLET_CREATED` | `1` | The agent wallet has been initialized |
+| `DID_CREATED` | `2` | A DID has been created and registered |
+
+The DID creation request accepts the following fields:
+
+```typescript
+{
+  method: string;       // e.g. "indy", "key", "web", "polygon"
+  keyType: string;      // e.g. "ed25519"
+  network?: string;     // e.g. "bcovrin:testnet" (for indy)
+  domain?: string;      // e.g. "www.github.com" (for did:web)
+  seed?: string;        // optional 32-character seed
+  role?: string;        // e.g. "endorser"
+  endorserDid?: string; // e.g. "did:indy:bcovrin:testnet:..."
+  isPrimaryDid: boolean;
+}
+```
+
+<Note>
+The `seed` field must be exactly 32 characters if provided. Spaces are not allowed.
+</Note>
+
+## Organizations and their DIDs
+
+Each organization in CREDEBL can have multiple DIDs registered under different methods or networks. The organization's DID list is accessible to members with the `owner`, `admin`, `issuer`, or `member` role via `GET /orgs/:orgId/dids`.
+
+### Primary DID
+
+The **primary DID** is the DID an organization uses by default for issuing credentials and responding to proof requests. It can be set or changed with `PUT /orgs/:orgId/primary-did`.
+
+Setting `isPrimaryDid: true` during DID creation automatically designates that DID as the primary one. Only one DID can be primary at a time.
+
+<AccordionGroup>
+  <Accordion title="What is the difference between did:key and did:indy?">
+    `did:key` is derived entirely from a public key and requires no ledger. It is portable and self-contained, but it cannot be updated or revoked. `did:indy` is anchored on a Hyperledger Indy ledger, which means it can be resolved by any participant on that network and supports credential definition publication and revocation.
+  </Accordion>
+  <Accordion title="Do I need an endorser to create a did:indy DID?">
+    On permissioned Indy networks (such as Indicio Mainnet), writing a DID to the ledger requires a transaction signed by an endorser — a trusted party with write access. On open test networks like Bcovrin Testnet, you may be able to self-endorse. The `endorserDid` field in the DID creation DTO is used to specify the endorser.
+  </Accordion>
+  <Accordion title="Can an organization have multiple DIDs?">
+    Yes. An organization can create DIDs on multiple ledgers and using multiple methods. Only one DID is designated as the primary DID at any time. The others remain available and can be used for specific purposes or promoted to primary as needed.
+  </Accordion>
+  <Accordion title="What key types are supported?">
+    CREDEBL supports `ed25519`, `bls12381g1g2`, `bls12381g1`, `bls12381g2`, `x25519`, `p256`, `p384`, `p521`, and `k256`. The most commonly used key type for Indy-based DIDs is `ed25519`.
+  </Accordion>
+  <Accordion title="What is a DID Document?">
+    A DID Document is a JSON-LD object that the DID resolves to. It contains the DID subject, verification methods (public keys), authentication references, and optionally service endpoints. CREDEBL's agents use the DID Document to locate the public key needed to verify signatures on credentials and proofs.
+  </Accordion>
+</AccordionGroup>

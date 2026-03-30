@@ -1,0 +1,296 @@
+---
+title: "Authentication"
+description: "How to register, log in, and authorize API requests using JWT Bearer tokens."
+---
+
+The CREDEBL platform API uses **JWT Bearer tokens** issued by Keycloak. Every protected endpoint requires an `Authorization: Bearer <token>` header. Tokens are signed with RS256 and verified against the Keycloak JWKS endpoint derived from the token's `iss` claim.
+
+<Note>
+  The platform supports three authentication methods: Supabase-backed email/password (primary), Keycloak SSO (for multi-client deployments), and FIDO/WebAuthn passkeys. All methods ultimately produce a Keycloak-issued JWT.
+</Note>
+
+---
+
+## Registration and login flow
+
+<Steps>
+  <Step title="Request a verification email">
+    Send the user's email address to receive a one-time verification code.
+
+    <CodeGroup>
+
+    ```bash curl
+    curl -X POST https://api.example.com/v1/auth/verification-mail \
+      -H "Content-Type: application/json" \
+      -d '{ "email": "user@example.com" }'
+    ```
+
+    ```json response
+    {
+      "statusCode": 201,
+      "message": "Verification code sent successfully."
+    }
+    ```
+
+    </CodeGroup>
+
+    An optional `clientAlias` query parameter targets a specific SSO client. If omitted, the default client is used.
+  </Step>
+
+  <Step title="Verify the email address">
+    Confirm the verification code delivered to the user's inbox.
+
+    ```bash curl
+    curl "https://api.example.com/v1/auth/verify?email=user@example.com&verificationCode=123456"
+    ```
+  </Step>
+
+  <Step title="Complete registration">
+    Submit the user's profile details to create the account.
+
+    ```bash curl
+    curl -X POST https://api.example.com/v1/auth/signup \
+      -H "Content-Type: application/json" \
+      -d '{
+        "email": "user@example.com",
+        "password": "StrongP@ssword1",
+        "firstName": "Alice",
+        "lastName": "Smith"
+      }'
+    ```
+  </Step>
+
+  <Step title="Sign in">
+    Exchange credentials for a JWT access token and a refresh token.
+
+    <CodeGroup>
+
+    ```bash curl
+    curl -X POST https://api.example.com/v1/auth/signin \
+      -H "Content-Type: application/json" \
+      -d '{
+        "email": "user@example.com",
+        "password": "StrongP@ssword1"
+      }'
+    ```
+
+    ```json response
+    {
+      "statusCode": 200,
+      "message": "Login successful.",
+      "data": {
+        "access_token": "eyJhbGciOiJSUzI1NiIsInR5...",
+        "token_type": "Bearer",
+        "expires_in": 86400,
+        "scope": "email profile"
+      }
+    }
+    ```
+
+    </CodeGroup>
+  </Step>
+
+  <Step title="Call protected endpoints">
+    Include the token in the `Authorization` header for every subsequent request.
+
+    ```bash curl
+    curl https://api.example.com/v1/organizations \
+      -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5..."
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Token refresh
+
+Access tokens expire after the duration specified in `expires_in` (seconds). Use the refresh token returned at sign-in to obtain a new access token without requiring the user to re-authenticate.
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.example.com/v1/auth/refresh-token \
+  -H "Content-Type: application/json" \
+  -d '{ "refreshToken": "<your-refresh-token>" }'
+```
+
+```json response
+{
+  "statusCode": 200,
+  "message": "Token refreshed successfully.",
+  "data": {
+    "access_token": "eyJhbGciOiJSUzI1NiIsInR5...",
+    "token_type": "Bearer",
+    "expires_in": 86400
+  }
+}
+```
+
+</CodeGroup>
+
+<Warning>
+  Store refresh tokens securely. A leaked refresh token allows an attacker to obtain new access tokens until the session is revoked.
+</Warning>
+
+---
+
+## Sign out
+
+Invalidate the current session server-side. Requires a valid Bearer token.
+
+```bash curl
+curl -X POST https://api.example.com/v1/auth/signout \
+  -H "Authorization: Bearer <access-token>" \
+  -H "Content-Type: application/json" \
+  -d '{ "sessionId": "<session-id>" }'
+```
+
+---
+
+## Password reset
+
+<Tabs>
+  <Tab title="Forgot password">
+    Request a password-reset link sent to the user's email.
+
+    ```bash curl
+    curl -X POST https://api.example.com/v1/auth/forgot-password \
+      -H "Content-Type: application/json" \
+      -d '{
+        "email": "user@example.com",
+        "clientAlias": "CREDEBL"
+      }'
+    ```
+  </Tab>
+  <Tab title="Reset with token">
+    Set a new password using the token from the reset email.
+
+    ```bash curl
+    curl -X POST https://api.example.com/v1/auth/password-reset/user@example.com \
+      -H "Content-Type: application/json" \
+      -d '{
+        "verificationCode": "123456",
+        "newPassword": "NewStrongP@ssword1"
+      }'
+    ```
+  </Tab>
+  <Tab title="Reset while authenticated">
+    Change the password when the current password is known.
+
+    ```bash curl
+    curl -X POST https://api.example.com/v1/auth/reset-password \
+      -H "Content-Type: application/json" \
+      -d '{
+        "email": "user@example.com",
+        "oldPassword": "OldP@ssword1",
+        "newPassword": "NewStrongP@ssword1"
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Auth providers
+
+<Tabs>
+  <Tab title="Supabase">
+    Supabase is the primary identity backend. The platform uses `SUPABASE_URL`, `SUPABASE_KEY`, and `SUPABASE_JWT_SECRET` to verify tokens and manage user records.
+
+    Set these three variables in `.env`:
+
+    ```bash .env
+    SUPABASE_URL=https://xyzcompany.supabase.co
+    SUPABASE_KEY=<anon-public-key>
+    SUPABASE_JWT_SECRET=<jwt-secret>
+    ```
+
+    <Warning>
+      `SUPABASE_JWT_SECRET` is used for server-side token verification. Never expose it in client-side code.
+    </Warning>
+  </Tab>
+  <Tab title="Keycloak SSO">
+    Keycloak is used for JWT issuance and SSO. The JWT strategy in the API Gateway validates tokens by fetching the JWKS from `{iss}/protocol/openid-connect/certs`, where `iss` is read from the incoming token's `iss` claim.
+
+    Configure Keycloak in `.env`:
+
+    ```bash .env
+    KEYCLOAK_DOMAIN=http://localhost:8080/
+    KEYCLOAK_ADMIN_URL=http://localhost:8080
+    KEYCLOAK_MASTER_REALM=master
+    KEYCLOAK_MANAGEMENT_CLIENT_ID=<management-client-id>
+    KEYCLOAK_MANAGEMENT_CLIENT_SECRET=<management-client-secret>
+    KEYCLOAK_REALM=credebl-platform
+    ```
+
+    Tokens are verified using RS256. The `algorithms` field in `JwtStrategy` is locked to `['RS256']`.
+  </Tab>
+  <Tab title="FIDO / WebAuthn">
+    The platform supports FIDO2/WebAuthn passkey authentication via a dedicated FIDO microservice.
+
+    Set the FIDO service endpoint in `.env`:
+
+    ```bash .env
+    FIDO_API_ENDPOINT=http://localhost:8000
+    ```
+
+    The `FIDO_SERVICE` constant (`fido`) identifies the NATS subject used to route WebAuthn requests through the microservice mesh. After attestation and assertion the FIDO service returns a Keycloak session token that follows the same Bearer flow.
+  </Tab>
+</Tabs>
+
+---
+
+## Multi-client SSO (`clientAlias`)
+
+The platform can serve multiple front-end clients from a single backend. Each client has its own Keycloak management credentials and post-login redirect domain. The `clientAlias` concept ties a request to a specific client.
+
+**How it works:**
+
+1. `SUPPORTED_SSO_CLIENTS` lists all enabled client names (comma-separated).
+2. For each name, four environment variables are expected:
+   - `{NAME}_CLIENT_ALIAS` — short alias token
+   - `{NAME}_DOMAIN` — post-login redirect URL
+   - `{NAME}_KEYCLOAK_MANAGEMENT_CLIENT_ID` — encrypted client ID
+   - `{NAME}_KEYCLOAK_MANAGEMENT_CLIENT_SECRET` — encrypted client secret
+3. The `GET /auth/clientAliases` endpoint returns all configured aliases and their domains.
+4. Auth endpoints that accept a `clientAlias` query parameter (e.g., `POST /auth/verification-mail`) use the alias to select the correct Keycloak client for the operation.
+
+**Example: adding a second client**
+
+```bash .env
+SUPPORTED_SSO_CLIENTS=CREDEBL,VERIFIER
+
+VERIFIER_CLIENT_ALIAS=VERIFIER
+VERIFIER_DOMAIN=https://verifier.example.com
+VERIFIER_KEYCLOAK_MANAGEMENT_CLIENT_ID=<encrypted-client-id>
+VERIFIER_KEYCLOAK_MANAGEMENT_CLIENT_SECRET=<encrypted-client-secret>
+```
+
+<Note>
+  `CREDEBL_KEYCLOAK_MANAGEMENT_CLIENT_ID` and `_SECRET` values must be encrypted using `CRYPTO_PRIVATE_KEY` before being stored in `.env`. Use the same encryption key as configured in the Studio UI.
+</Note>
+
+---
+
+## Session management
+
+The platform tracks sessions server-side. A `sid` claim in the JWT is validated against the session store on every authenticated request (see `JwtStrategy.validate`). A token whose session has been revoked is rejected with `401 Unauthorized`.
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/auth/{userId}/sessions` | `GET` | List all active sessions for a user |
+| `/auth/{sessionId}/sessions` | `DELETE` | Revoke a specific session by ID |
+
+<Note>
+  Users can only view and revoke their own sessions. Attempting to access another user's sessions returns `403 Forbidden`.
+</Note>
+
+---
+
+## HTTP error reference
+
+| Status | Meaning | Common causes and resolution |
+|---|---|---|
+| `401 Unauthorized` | Missing or invalid token | Token absent, expired, malformed, or the session has been revoked. Sign in again to obtain a fresh token. |
+| `403 Forbidden` | Authenticated but not authorized | The token is valid but the user lacks the required role or org permission for the requested resource. Check the user's organization role assignment. |
+| `404 Not Found` (from auth) | User record not found | The `sub` claim in the JWT does not match any user in the database. This can occur after user deletion or an identity provider misconfiguration. |

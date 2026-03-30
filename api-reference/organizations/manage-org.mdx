@@ -1,0 +1,677 @@
+---
+title: "Manage organizations"
+description: "Create, read, update, and delete organizations, manage DIDs, and issue client credentials."
+---
+
+## Create organization
+
+`POST /orgs`
+
+Creates a new organization. The authenticated user becomes the `owner` of the new organization.
+
+**Required roles:** Authenticated user (no org role required — creates a new org).
+
+### Request body
+
+<ParamField body="name" type="string" required>
+  Display name for the organization. Must be between 2 and 200 characters.
+</ParamField>
+
+<ParamField body="description" type="string" required>
+  A short description of the organization. Must be between 2 and 1000 characters.
+</ParamField>
+
+<ParamField body="logo" type="string">
+  Logo image encoded as a base64 string or a URL. Defaults to an empty string.
+</ParamField>
+
+<ParamField body="website" type="string">
+  The organization's website URL.
+</ParamField>
+
+<ParamField body="notificationWebhook" type="string">
+  A fully qualified URL (including protocol and TLD) where the platform sends event notifications. Must include `http://` or `https://`.
+</ParamField>
+
+<ParamField body="registrationNumber" type="string">
+  Official registration number for the organization.
+</ParamField>
+
+<ParamField body="countryId" type="number">
+  Numeric ID for the organization's country.
+</ParamField>
+
+<ParamField body="stateId" type="number">
+  Numeric ID for the organization's state or province.
+</ParamField>
+
+<ParamField body="cityId" type="number">
+  Numeric ID for the organization's city.
+</ParamField>
+
+### Response
+
+Returns `201 Created` with the created organization object.
+
+<ResponseField name="statusCode" type="number">
+  HTTP status code. `201` on success.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable result message.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The newly created organization.
+
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">
+      UUID of the created organization.
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Organization name.
+    </ResponseField>
+    <ResponseField name="description" type="string">
+      Organization description.
+    </ResponseField>
+    <ResponseField name="logoUrl" type="string">
+      URL or base64-encoded logo.
+    </ResponseField>
+    <ResponseField name="website" type="string">
+      Organization website.
+    </ResponseField>
+    <ResponseField name="registrationNumber" type="string">
+      Registration number.
+    </ResponseField>
+    <ResponseField name="isPublic" type="boolean">
+      Whether the organization is publicly listed.
+    </ResponseField>
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp of creation.
+    </ResponseField>
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp of last update.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<CodeGroup>
+
+```bash cURL
+curl --request POST \
+  --url https://your-platform.example.com/orgs \
+  --header 'Authorization: Bearer <your-jwt-token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "name": "Acme Corp",
+    "description": "A credential-issuing organization for Acme Corp.",
+    "website": "https://acme.example.com",
+    "notificationWebhook": "https://acme.example.com/webhooks/credebl",
+    "countryId": 101,
+    "stateId": 4008,
+    "cityId": 1000
+  }'
+```
+
+```json Response
+{
+  "statusCode": 201,
+  "message": "Organization created successfully",
+  "data": {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "name": "Acme Corp",
+    "description": "A credential-issuing organization for Acme Corp.",
+    "logoUrl": "",
+    "website": "https://acme.example.com",
+    "isPublic": false,
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "updatedAt": "2024-01-15T10:30:00.000Z"
+  }
+}
+```
+
+</CodeGroup>
+
+---
+
+## List organizations
+
+`GET /orgs`
+
+Returns all organizations the authenticated user is a member of. Supports filtering by role and pagination.
+
+**Required roles:** Authenticated user.
+
+### Query parameters
+
+<ParamField query="pageNumber" type="number" default="1">
+  Page number to retrieve. Must be 1 or greater.
+</ParamField>
+
+<ParamField query="pageSize" type="number" default="10">
+  Number of results per page. Must be between 1 and 100.
+</ParamField>
+
+<ParamField query="search" type="string">
+  Filter organizations by name.
+</ParamField>
+
+<ParamField query="role" type="string">
+  Filter by the user's role within each organization. Accepted values: `owner`, `admin`, `issuer`, `verifier`, `member`, `holder`, `super_admin`, `platform_admin`.
+</ParamField>
+
+<CodeGroup>
+
+```bash cURL
+curl --request GET \
+  --url 'https://your-platform.example.com/orgs?pageNumber=1&pageSize=10&role=owner' \
+  --header 'Authorization: Bearer <your-jwt-token>'
+```
+
+```json Response
+{
+  "statusCode": 200,
+  "message": "Organizations fetched successfully",
+  "data": {
+    "totalItems": 2,
+    "hasNextPage": false,
+    "hasPreviousPage": false,
+    "nextPage": null,
+    "previousPage": null,
+    "lastPage": 1,
+    "data": [
+      {
+        "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "name": "Acme Corp",
+        "description": "A credential-issuing organization.",
+        "logoUrl": "",
+        "isPublic": false,
+        "userOrgRoles": [{ "orgRole": { "name": "owner" } }]
+      }
+    ]
+  }
+}
+```
+
+</CodeGroup>
+
+---
+
+## Get organization
+
+`GET /orgs/:orgId`
+
+Returns the details of a single organization by its ID.
+
+**Required roles:** `owner`, `admin`, `issuer`, `verifier`, `member`
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization.
+</ParamField>
+
+### Response
+
+<ResponseField name="statusCode" type="number">
+  `200` on success.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable result message.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Organization details.
+
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">
+      UUID of the organization.
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Organization name.
+    </ResponseField>
+    <ResponseField name="description" type="string">
+      Organization description.
+    </ResponseField>
+    <ResponseField name="logoUrl" type="string">
+      URL or base64-encoded logo.
+    </ResponseField>
+    <ResponseField name="website" type="string">
+      Organization website.
+    </ResponseField>
+    <ResponseField name="isPublic" type="boolean">
+      Whether the organization has a public profile.
+    </ResponseField>
+    <ResponseField name="registrationNumber" type="string">
+      Official registration number.
+    </ResponseField>
+    <ResponseField name="countryId" type="number">
+      Country identifier.
+    </ResponseField>
+    <ResponseField name="stateId" type="number">
+      State or province identifier.
+    </ResponseField>
+    <ResponseField name="cityId" type="number">
+      City identifier.
+    </ResponseField>
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 creation timestamp.
+    </ResponseField>
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 last-updated timestamp.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<CodeGroup>
+
+```bash cURL
+curl --request GET \
+  --url https://your-platform.example.com/orgs/3fa85f64-5717-4562-b3fc-2c963f66afa6 \
+  --header 'Authorization: Bearer <your-jwt-token>'
+```
+
+```json Response
+{
+  "statusCode": 200,
+  "message": "Organization fetched successfully",
+  "data": {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "name": "Acme Corp",
+    "description": "A credential-issuing organization.",
+    "logoUrl": "",
+    "website": "https://acme.example.com",
+    "isPublic": false,
+    "registrationNumber": "ACM-2024-001",
+    "countryId": 101,
+    "stateId": 4008,
+    "cityId": 1000,
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "updatedAt": "2024-01-15T10:30:00.000Z"
+  }
+}
+```
+
+</CodeGroup>
+
+---
+
+## Update organization
+
+`PUT /orgs/:orgId`
+
+Updates the mutable fields of an existing organization. All body fields are optional — only the fields you include are changed.
+
+**Required roles:** `owner`, `admin`
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization to update. Must be a valid UUID v4.
+</ParamField>
+
+### Request body
+
+<ParamField body="name" type="string">
+  Updated display name. Between 2 and 200 characters.
+</ParamField>
+
+<ParamField body="description" type="string">
+  Updated description. Between 2 and 1000 characters.
+</ParamField>
+
+<ParamField body="logo" type="string">
+  Updated logo as a base64-encoded image string. Must pass the `ImageBase64Validator` check.
+</ParamField>
+
+<ParamField body="website" type="string">
+  Updated website URL.
+</ParamField>
+
+<ParamField body="isPublic" type="boolean" default="false">
+  When `true`, the organization appears in public profile listings.
+</ParamField>
+
+<ParamField body="countryId" type="number">
+  Updated country ID.
+</ParamField>
+
+<ParamField body="stateId" type="number">
+  Updated state or province ID.
+</ParamField>
+
+<ParamField body="cityId" type="number">
+  Updated city ID.
+</ParamField>
+
+<CodeGroup>
+
+```bash cURL
+curl --request PUT \
+  --url https://your-platform.example.com/orgs/3fa85f64-5717-4562-b3fc-2c963f66afa6 \
+  --header 'Authorization: Bearer <your-jwt-token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "description": "Updated description for Acme Corp.",
+    "website": "https://new.acme.example.com",
+    "isPublic": true
+  }'
+```
+
+```json Response
+{
+  "statusCode": 200,
+  "message": "Organization updated successfully"
+}
+```
+
+</CodeGroup>
+
+---
+
+## Delete organization
+
+`DELETE /orgs/:orgId`
+
+Permanently deletes an organization and all associated data. This action is irreversible.
+
+**Required roles:** `owner`
+
+<Warning>
+  Deleting an organization removes all associated schemas, credentials, and DID configurations. This cannot be undone.
+</Warning>
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization to delete. Must be a valid UUID v4.
+</ParamField>
+
+<CodeGroup>
+
+```bash cURL
+curl --request DELETE \
+  --url https://your-platform.example.com/orgs/3fa85f64-5717-4562-b3fc-2c963f66afa6 \
+  --header 'Authorization: Bearer <your-jwt-token>'
+```
+
+```json Response
+{
+  "statusCode": 200,
+  "message": "Organization deleted successfully"
+}
+```
+
+</CodeGroup>
+
+---
+
+## List DIDs
+
+`GET /orgs/:orgId/dids`
+
+Returns all decentralized identifiers (DIDs) registered to an organization.
+
+**Required roles:** `owner`, `admin`, `issuer`, `member`
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization.
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="object[]">
+  Array of DID records.
+
+  <Expandable title="DID object properties">
+    <ResponseField name="id" type="string">
+      UUID of the DID record.
+    </ResponseField>
+    <ResponseField name="did" type="string">
+      The DID string (e.g., `did:indy:sovrin:abc123`).
+    </ResponseField>
+    <ResponseField name="isPrimaryDid" type="boolean">
+      Whether this is the organization's primary DID.
+    </ResponseField>
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 creation timestamp.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<CodeGroup>
+
+```bash cURL
+curl --request GET \
+  --url https://your-platform.example.com/orgs/3fa85f64-5717-4562-b3fc-2c963f66afa6/dids \
+  --header 'Authorization: Bearer <your-jwt-token>'
+```
+
+```json Response
+{
+  "statusCode": 200,
+  "message": "Organization DIDs fetched successfully",
+  "data": [
+    {
+      "id": "7e5d8a1b-3c2e-4f6a-9b0d-1e2f3a4b5c6d",
+      "did": "did:indy:sovrin:staging:ABcDeFGhiJkLmNoPqRsTuV",
+      "isPrimaryDid": true,
+      "createdAt": "2024-01-15T10:30:00.000Z"
+    }
+  ]
+}
+```
+
+</CodeGroup>
+
+---
+
+## Set primary DID
+
+`PUT /orgs/:orgId/primary-did`
+
+Designates one of the organization's registered DIDs as its primary identifier. The primary DID is used by default in credential issuance and verification flows.
+
+**Required roles:** `owner`, `admin`, `issuer`, `verifier`, `member`
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization.
+</ParamField>
+
+### Request body
+
+<ParamField body="did" type="string" required>
+  The DID string to set as primary (e.g., `did:indy:sovrin:staging:ABcDeFGhiJkLmNoPqRsTuV`).
+</ParamField>
+
+<ParamField body="id" type="string" required>
+  The UUID of the DID record in the platform database. Retrieve this from `GET /orgs/:orgId/dids`.
+</ParamField>
+
+<CodeGroup>
+
+```bash cURL
+curl --request PUT \
+  --url https://your-platform.example.com/orgs/3fa85f64-5717-4562-b3fc-2c963f66afa6/primary-did \
+  --header 'Authorization: Bearer <your-jwt-token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "did": "did:indy:sovrin:staging:ABcDeFGhiJkLmNoPqRsTuV",
+    "id": "7e5d8a1b-3c2e-4f6a-9b0d-1e2f3a4b5c6d"
+  }'
+```
+
+```json Response
+{
+  "statusCode": 201,
+  "message": "Primary DID set successfully"
+}
+```
+
+</CodeGroup>
+
+---
+
+## Get org roles
+
+`GET /orgs/:orgId/roles`
+
+Returns the available role definitions for a specific organization.
+
+**Required roles:** `owner`, `admin`
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization.
+</ParamField>
+
+<CodeGroup>
+
+```bash cURL
+curl --request GET \
+  --url https://your-platform.example.com/orgs/3fa85f64-5717-4562-b3fc-2c963f66afa6/roles \
+  --header 'Authorization: Bearer <your-jwt-token>'
+```
+
+```json Response
+{
+  "statusCode": 200,
+  "message": "Organization roles fetched successfully",
+  "data": [
+    { "id": "1a7eac11-ff05-40d7-8351-4d7467687cad", "name": "owner" },
+    { "id": "2b8fbd22-ff06-41e8-9462-5e8578798dbe", "name": "admin" },
+    { "id": "3c9fce33-ff07-42f9-a573-6f9689809ecf", "name": "issuer" },
+    { "id": "4d0gdf44-ff08-43g0-b684-7g0790810fdg", "name": "verifier" },
+    { "id": "5e1heg55-ff09-44h1-c795-8h1801921geh", "name": "member" }
+  ]
+}
+```
+
+</CodeGroup>
+
+---
+
+## Generate client credentials
+
+`POST /orgs/:orgId/client_credentials`
+
+Creates a client ID and client secret for the organization, enabling machine-to-machine (M2M) access without a user session. Use the returned credentials with `POST /orgs/:clientId/token` to obtain an access token.
+
+**Required roles:** `owner`
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization.
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="object">
+  The generated client credentials.
+
+  <Expandable title="properties">
+    <ResponseField name="clientId" type="string">
+      The client identifier. Use this as the `:clientId` path parameter when requesting a token.
+    </ResponseField>
+    <ResponseField name="clientSecret" type="string">
+      The client secret. Store this securely — it is not retrievable after this response.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<CodeGroup>
+
+```bash cURL
+curl --request POST \
+  --url https://your-platform.example.com/orgs/3fa85f64-5717-4562-b3fc-2c963f66afa6/client_credentials \
+  --header 'Authorization: Bearer <your-jwt-token>'
+```
+
+```json Response
+{
+  "statusCode": 201,
+  "message": "Organization client credentials created successfully",
+  "data": {
+    "clientId": "acme-corp-client-abc123",
+    "clientSecret": "s3cr3t-v4lue-abc123xyz"
+  }
+}
+```
+
+</CodeGroup>
+
+<Warning>
+  The `clientSecret` is returned only once. Copy it immediately and store it in a secure secrets manager.
+</Warning>
+
+---
+
+## Get client token
+
+`POST /orgs/:clientId/token`
+
+Exchanges an organization's client credentials for an access token using the `client_credentials` OAuth 2.0 grant. The token is returned in the response body and a `session_id` cookie is also set.
+
+**Authentication:** No JWT bearer token required. Uses client credentials in the request body.
+
+### Path parameters
+
+<ParamField path="clientId" type="string" required>
+  The client ID obtained from `POST /orgs/:orgId/client_credentials`.
+</ParamField>
+
+### Request body
+
+<ParamField body="clientSecret" type="string" required>
+  The client secret paired with the client ID.
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="object">
+  The authentication result.
+
+  <Expandable title="properties">
+    <ResponseField name="accessToken" type="string">
+      A bearer token to use in subsequent API requests via `Authorization: Bearer`.
+    </ResponseField>
+    <ResponseField name="sessionId" type="string">
+      Session identifier also set as an `httpOnly` cookie named `session_id`.
+    </ResponseField>
+    <ResponseField name="expiresIn" type="number">
+      Token lifetime in seconds.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<CodeGroup>
+
+```bash cURL
+curl --request POST \
+  --url https://your-platform.example.com/orgs/acme-corp-client-abc123/token \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "clientSecret": "s3cr3t-v4lue-abc123xyz"
+  }'
+```
+
+```json Response
+{
+  "statusCode": 200,
+  "message": "Client credentials authenticated successfully",
+  "data": {
+    "accessToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "sessionId": "sess_abc123xyz",
+    "expiresIn": 3600
+  }
+}
+```
+
+</CodeGroup>

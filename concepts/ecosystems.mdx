@@ -1,0 +1,170 @@
+---
+title: "Ecosystems"
+description: "How CREDEBL ecosystems create multi-organization trust frameworks, ecosystem roles, governance, and the invitation and approval workflow."
+---
+
+An **ecosystem** in CREDEBL is a trust framework that brings multiple organizations together under shared governance. Instead of each organization operating independently, an ecosystem allows a lead organization to define rules, invite members, and coordinate credential schema endorsement across all participants.
+
+Common use cases include national digital identity programs, industry credential consortia, and education networks where multiple institutions issue and accept each other's credentials.
+
+## Ecosystem roles
+
+<CardGroup cols={2}>
+  <Card title="Ecosystem Lead" icon="crown">
+    The governing organization of the ecosystem. The Ecosystem Lead:
+    - Creates the ecosystem
+    - Invites other organizations to join
+    - Removes members from the ecosystem
+    - Updates member status (ACTIVE / INACTIVE)
+    - Manages schema endorsement rules
+    - Accesses the ecosystem dashboard
+
+    Only users with the `Ecosystem Lead` org role can perform these actions. This role is assigned when the ecosystem is created.
+  </Card>
+  <Card title="Ecosystem Member" icon="building">
+    An organization that has accepted an invitation to join the ecosystem. Ecosystem Members:
+    - Operate under the governance rules set by the Lead
+    - Issue and verify credentials within the trust framework
+    - Can view their ecosystem memberships and invitation status
+
+    The `Ecosystem Member` org role is assigned when an organization accepts an ecosystem invitation.
+  </Card>
+</CardGroup>
+
+The `EcosystemRoles` enum defines two roles: `Ecosystem Lead` and `Ecosystem Member`. The `EcosystemServiceRole` enum uses the values `lead` and `member` internally.
+
+## Creating an ecosystem
+
+<Steps>
+  <Step title="Prerequisites">
+    The creating user must belong to an organization with an active agent and hold the `owner` role in that organization.
+  </Step>
+  <Step title="Create the ecosystem">
+    The organization owner calls the create ecosystem endpoint:
+
+    ```http
+    POST /ecosystem?orgId=<orgId>
+    Authorization: Bearer <token>
+
+    {
+      "name": "National Education Network",
+      "description": "Trust framework for accredited educational institutions",
+      "logoUrl": "https://example.com/logo.png"
+    }
+    ```
+
+    The creating organization is automatically assigned the `Ecosystem Lead` role.
+  </Step>
+  <Step title="Configure ecosystem settings">
+    The Ecosystem Lead can configure settings including:
+    - `enableEcosystem` — enable or disable ecosystem features
+    - `autoEndorsement` — automatically endorse schema transactions from members
+    - `participateInEcosystem` — allow the lead org to also act as a member
+    - `multiEcosystemSupport` — allow member orgs to join multiple ecosystems
+
+    These are controlled via the `EcosystemConfigSettings` enum.
+  </Step>
+  <Step title="Invite organizations">
+    The Ecosystem Lead invites other organizations:
+
+    ```http
+    POST /ecosystem/invitation
+    Authorization: Bearer <token>
+
+    {
+      "orgId": "<target-org-id>",
+      "ecosystemId": "<ecosystem-id>"
+    }
+    ```
+
+    Only users with the `Ecosystem Lead` org role can send invitations.
+  </Step>
+  <Step title="Organizations accept or reject">
+    The invited organization's owner reviews the invitation. They can accept or reject it:
+
+    ```http
+    PUT /ecosystem/invitation/status?status=accepted
+    Authorization: Bearer <token>
+
+    {
+      "ecosystemId": "<ecosystem-id>",
+      "orgId": "<org-id>"
+    }
+    ```
+
+    The `status` query parameter must be either `accepted` or `rejected`.
+  </Step>
+</Steps>
+
+## Invitation and approval workflow
+
+Ecosystem invitations follow the same state machine as organization member invitations, using the `Invitation` enum:
+
+| State | Description |
+|-------|-------------|
+| `pending` | Invitation has been sent and is awaiting a response |
+| `accepted` | The invited organization has joined the ecosystem |
+| `rejected` | The invitation was declined |
+
+Transitions are one-directional: a `pending` invitation can move to `accepted` or `rejected`, but accepted and rejected states are terminal.
+
+<Note>
+An organization can check the status of all its ecosystem invitations — both as a Lead and as a potential Member — using `GET /ecosystem/invitations?role=<role>`. The `InvitationViewRole` enum accepts `Ecosystem Lead` or `Ecosystem Member` as the role parameter.
+</Note>
+
+## Ecosystem member status
+
+Once an organization has joined an ecosystem, the Ecosystem Lead can change its operational status using the `EcosystemOrgStatus` enum:
+
+| Status | Description |
+|--------|-------------|
+| `ACTIVE` | The organization is an active ecosystem participant |
+| `INACTIVE` | The organization has been deactivated within the ecosystem |
+
+To update status:
+
+```http
+PUT /ecosystem/member/status?status=INACTIVE
+Authorization: Bearer <token>
+
+{
+  "ecosystemId": "<ecosystem-id>",
+  "orgIds": ["<org-id-1>", "<org-id-2>"]
+}
+```
+
+## Ecosystem governance and schema endorsement
+
+On permissioned Hyperledger Indy networks, writing a schema or credential definition to the ledger requires a transaction signed by an **endorser**. In an ecosystem context, the Ecosystem Lead typically acts as the endorser for member organizations.
+
+The `EndorserTransactionType` enum defines two transaction types that require endorsement:
+- `schema` — publishing a new credential schema
+- `credential-definition` — publishing a new credential definition
+
+When `autoEndorsement` is enabled in the ecosystem configuration, the lead's agent automatically signs endorsement requests from member organizations without manual approval.
+
+## Removing members
+
+The Ecosystem Lead can remove one or more organizations from the ecosystem:
+
+```http
+DELETE /ecosystem/member
+Authorization: Bearer <token>
+
+{
+  "ecosystemId": "<ecosystem-id>",
+  "orgIds": ["<org-id-1>"]
+}
+```
+
+Removed organizations lose their `Ecosystem Member` role and can no longer participate in the ecosystem's governance or endorsement flows.
+
+## Viewing ecosystem data
+
+| Endpoint | Roles | Description |
+|----------|-------|-------------|
+| `GET /ecosystem` | `platform_admin`, `Ecosystem Lead`, `Ecosystem Member` | List all ecosystems accessible to the user |
+| `GET /ecosystem/:ecosystemId/org/:orgId` | `platform_admin`, `owner`, `admin` | Dashboard data for a specific ecosystem and organization |
+| `GET /ecosystem/members` | `Ecosystem Lead` | All organizations in a specific ecosystem |
+| `GET /ecosystem/invitations` | `owner` | Invitations for lead and member roles |
+| `GET /ecosystem/invitation/status` | authenticated user | Status of pending ecosystem creation invitations |

@@ -1,0 +1,388 @@
+---
+title: "Invitations and membership"
+description: "Invite users to an organization, manage pending invitations, and update member roles."
+---
+
+Organization membership is managed through an email invitation flow. An owner or admin sends an invitation to one or more email addresses. Each invitee receives an email and accepts the invitation through their user account. Once accepted, the user joins the organization with the roles specified in the invitation.
+
+## Invitation flow
+
+<Steps>
+  <Step title="Send invitations">
+    An `owner` or `admin` calls `POST /orgs/:orgId/invitations` with a list of email addresses and the desired role IDs for each invitee.
+  </Step>
+  <Step title="Platform sends email">
+    The platform sends an invitation email to each address. The email contains a link directing the user to their CREDEBL account.
+  </Step>
+  <Step title="Invitee views pending invitations">
+    The invitee logs in and calls `GET /users/invitations` to see all pending invitations across all organizations.
+  </Step>
+  <Step title="Accept or reject">
+    The invitee calls `PUT /users/invitations/:invitationId` with `status: "accepted"` or `status: "rejected"` to act on the invitation.
+  </Step>
+  <Step title="Membership activated">
+    On acceptance, the user becomes a member of the organization with the assigned roles. They can now call `GET /orgs/:orgId` and other role-gated endpoints.
+  </Step>
+</Steps>
+
+---
+
+## Send invitations
+
+`POST /orgs/:orgId/invitations`
+
+Sends bulk invitations to one or more users. Each entry in the `invitations` array specifies an email address and one or more role IDs to assign upon acceptance.
+
+**Required roles:** `owner`, `super_admin`, `admin`
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization.
+</ParamField>
+
+### Request body
+
+<ParamField body="invitations" type="object[]" required>
+  Array of invitation objects. Each object targets one email address.
+
+  <Expandable title="SendInvitationDto properties">
+    <ParamField body="email" type="string" required>
+      Email address of the person to invite. Must be a valid email format.
+    </ParamField>
+    <ParamField body="orgRoleId" type="string[]" required>
+      Array of one or more role UUIDs to assign to the invitee. Retrieve available role IDs from `GET /orgs/:orgId/roles`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<CodeGroup>
+
+```bash cURL
+curl --request POST \
+  --url https://your-platform.example.com/orgs/3fa85f64-5717-4562-b3fc-2c963f66afa6/invitations \
+  --header 'Authorization: Bearer <your-jwt-token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "invitations": [
+      {
+        "email": "alice@example.com",
+        "orgRoleId": ["3c9fce33-ff07-42f9-a573-6f9689809ecf"]
+      },
+      {
+        "email": "bob@example.com",
+        "orgRoleId": ["4d0gdf44-ff08-43g0-b684-7g0790810fdg", "3c9fce33-ff07-42f9-a573-6f9689809ecf"]
+      }
+    ]
+  }'
+```
+
+```json Response
+{
+  "statusCode": 201,
+  "message": "Invitation created successfully"
+}
+```
+
+</CodeGroup>
+
+<Info>
+  Role IDs (`orgRoleId`) are UUIDs, not role name strings. Use `GET /orgs/:orgId/roles` to look up the UUID for each role name.
+</Info>
+
+---
+
+## List invitations
+
+`GET /orgs/:orgId/invitations`
+
+Returns all invitations (pending, accepted, or rejected) for an organization. Supports pagination and search.
+
+**Required roles:** `owner`, `super_admin`, `admin`, `issuer`, `verifier`, `member`
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization.
+</ParamField>
+
+### Query parameters
+
+<ParamField query="pageNumber" type="number" default="1">
+  Page number to retrieve. Must be 1 or greater.
+</ParamField>
+
+<ParamField query="pageSize" type="number" default="10">
+  Number of results per page. Between 1 and 100.
+</ParamField>
+
+<ParamField query="search" type="string">
+  Filter invitations by email address.
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="object">
+  Paginated invitation list.
+
+  <Expandable title="properties">
+    <ResponseField name="totalItems" type="number">
+      Total number of invitations matching the query.
+    </ResponseField>
+    <ResponseField name="data" type="object[]">
+      Array of invitation records.
+
+      <Expandable title="Invitation object properties">
+        <ResponseField name="id" type="string">
+          UUID of the invitation record.
+        </ResponseField>
+        <ResponseField name="email" type="string">
+          Email address of the invitee.
+        </ResponseField>
+        <ResponseField name="status" type="string">
+          Current invitation status: `pending`, `accepted`, or `rejected`.
+        </ResponseField>
+        <ResponseField name="orgRoles" type="object[]">
+          Roles assigned upon acceptance.
+        </ResponseField>
+        <ResponseField name="createdAt" type="string">
+          ISO 8601 timestamp when the invitation was created.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<CodeGroup>
+
+```bash cURL
+curl --request GET \
+  --url 'https://your-platform.example.com/orgs/3fa85f64-5717-4562-b3fc-2c963f66afa6/invitations?pageNumber=1&pageSize=10' \
+  --header 'Authorization: Bearer <your-jwt-token>'
+```
+
+```json Response
+{
+  "statusCode": 200,
+  "message": "Invitation fetched successfully",
+  "data": {
+    "totalItems": 2,
+    "hasNextPage": false,
+    "hasPreviousPage": false,
+    "data": [
+      {
+        "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "email": "alice@example.com",
+        "status": "pending",
+        "orgRoles": [{ "id": "3c9fce33-ff07-42f9-a573-6f9689809ecf", "name": "issuer" }],
+        "createdAt": "2024-01-20T09:00:00.000Z"
+      },
+      {
+        "id": "b2c3d4e5-f6a7-8901-bcde-fa2345678901",
+        "email": "bob@example.com",
+        "status": "accepted",
+        "orgRoles": [{ "id": "4d0gdf44-ff08-43g0-b684-7g0790810fdg", "name": "verifier" }],
+        "createdAt": "2024-01-19T08:00:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+</CodeGroup>
+
+---
+
+## Delete invitation
+
+`DELETE /orgs/:orgId/invitations/:invitationId`
+
+Cancels a pending invitation. Once deleted, the invitation link in the invitee's email is no longer valid.
+
+**Required roles:** `owner`, `admin`
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization.
+</ParamField>
+
+<ParamField path="invitationId" type="string" required>
+  UUID of the invitation to cancel. Must be a valid UUID v4.
+</ParamField>
+
+<CodeGroup>
+
+```bash cURL
+curl --request DELETE \
+  --url https://your-platform.example.com/orgs/3fa85f64-5717-4562-b3fc-2c963f66afa6/invitations/a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
+  --header 'Authorization: Bearer <your-jwt-token>'
+```
+
+```json Response
+{
+  "statusCode": 200,
+  "message": "Invitation deleted successfully"
+}
+```
+
+</CodeGroup>
+
+---
+
+## Update user roles
+
+`PUT /orgs/:orgId/user-roles/:userId`
+
+Replaces the existing role assignments for a member of the organization. All previously held roles are replaced by the new `orgRoleId` list.
+
+**Required roles:** `owner`, `admin`
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization.
+</ParamField>
+
+<ParamField path="userId" type="string" required>
+  UUID of the user whose roles should be updated. Must be a valid UUID v4.
+</ParamField>
+
+### Request body
+
+<ParamField body="orgRoleId" type="string[]" required>
+  Non-empty array of role UUIDs to assign to the user. Replaces all existing role assignments for this user in the organization. Retrieve role IDs from `GET /orgs/:orgId/roles`.
+</ParamField>
+
+<CodeGroup>
+
+```bash cURL
+curl --request PUT \
+  --url https://your-platform.example.com/orgs/3fa85f64-5717-4562-b3fc-2c963f66afa6/user-roles/d5e6f7a8-b9c0-1234-defa-bc5678901234 \
+  --header 'Authorization: Bearer <your-jwt-token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "orgRoleId": [
+      "3c9fce33-ff07-42f9-a573-6f9689809ecf",
+      "4d0gdf44-ff08-43g0-b684-7g0790810fdg"
+    ]
+  }'
+```
+
+```json Response
+{
+  "statusCode": 200,
+  "message": "User roles updated successfully"
+}
+```
+
+</CodeGroup>
+
+---
+
+## User-side invitation endpoints
+
+The following endpoints are called by the invited user from their own account to view and respond to invitations.
+
+### List pending invitations
+
+`GET /users/invitations`
+
+Returns all pending invitations for the authenticated user across all organizations.
+
+**Authentication:** JWT bearer token of the invited user.
+
+### Query parameters
+
+<ParamField query="pageNumber" type="number" default="1">
+  Page number to retrieve.
+</ParamField>
+
+<ParamField query="pageSize" type="number" default="10">
+  Number of results per page. Between 1 and 100.
+</ParamField>
+
+<ParamField query="search" type="string">
+  Filter by organization name.
+</ParamField>
+
+<CodeGroup>
+
+```bash cURL
+curl --request GET \
+  --url 'https://your-platform.example.com/users/invitations?pageNumber=1&pageSize=10' \
+  --header 'Authorization: Bearer <invited-user-jwt-token>'
+```
+
+```json Response
+{
+  "statusCode": 200,
+  "message": "Invitations fetched successfully",
+  "data": {
+    "totalItems": 1,
+    "data": [
+      {
+        "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "orgName": "Acme Corp",
+        "orgId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "status": "pending",
+        "orgRoles": [{ "name": "issuer" }],
+        "createdAt": "2024-01-20T09:00:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+</CodeGroup>
+
+### Accept or reject an invitation
+
+`PUT /users/invitations/:invitationId`
+
+Accepts or rejects a specific pending invitation. Once accepted, the user becomes a member of the organization with the assigned roles.
+
+**Authentication:** JWT bearer token of the invited user.
+
+#### Path parameters
+
+<ParamField path="invitationId" type="string" required>
+  UUID of the invitation to act on.
+</ParamField>
+
+#### Request body
+
+<ParamField body="status" type="string" required>
+  Set to `"accepted"` to join the organization or `"rejected"` to decline. Accepted values: `accepted`, `rejected`.
+</ParamField>
+
+<CodeGroup>
+
+```bash Accept invitation
+curl --request PUT \
+  --url https://your-platform.example.com/users/invitations/a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
+  --header 'Authorization: Bearer <invited-user-jwt-token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "status": "accepted"
+  }'
+```
+
+```bash Reject invitation
+curl --request PUT \
+  --url https://your-platform.example.com/users/invitations/a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
+  --header 'Authorization: Bearer <invited-user-jwt-token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "status": "rejected"
+  }'
+```
+
+```json Response
+{
+  "statusCode": 200,
+  "message": "Invitation updated successfully"
+}
+```
+
+</CodeGroup>

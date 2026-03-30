@@ -1,0 +1,354 @@
+---
+title: "Ecosystem API"
+description: "Manage multi-organization trust frameworks, invite members, and control membership status."
+---
+
+## Overview
+
+An **ecosystem** is a multi-organization trust framework on the CREDEBL platform. One organization takes the role of **Ecosystem Lead** and is responsible for inviting member organizations, approving or rejecting membership requests, and managing the lifecycle of the ecosystem.
+
+Member organizations can accept or reject invitations sent by the lead. Once accepted, members participate in the shared governance model defined by the ecosystem.
+
+### Ecosystem Org Status
+
+| Status | Description |
+|---|---|
+| `ACCEPTED` | The organization has been accepted into the ecosystem. |
+| `REJECTED` | The organization's membership was rejected. |
+| `PENDING` | The invitation is awaiting a response. |
+
+### Roles
+
+| Role | Description |
+|---|---|
+| `ECOSYSTEM_LEAD` | Full ecosystem management: invite, remove, and update member status. |
+| `ECOSYSTEM_MEMBER` | Read access to ecosystem details. |
+| `PLATFORM_ADMIN` | Platform-wide access across all ecosystems. |
+
+### Feature Flag
+
+All ecosystem endpoints are gated by `EcosystemFeatureGuard`. If the ecosystem feature is disabled on the platform, all endpoints return `403 Forbidden`.
+
+---
+
+## Ecosystem Setup Flow
+
+<Steps>
+  <Step title="Create an ecosystem">
+    An organization owner calls `POST /ecosystem` to create a new ecosystem, becoming the Ecosystem Lead.
+  </Step>
+  <Step title="Invite member organizations">
+    The Ecosystem Lead calls `POST /ecosystem/invitation` to invite other organizations by their `orgId`.
+  </Step>
+  <Step title="Invited org accepts or rejects">
+    The invited organization calls `PUT /ecosystem/invitation/status?status=accepted` or `?status=rejected` with the ecosystem and org IDs.
+  </Step>
+  <Step title="Lead manages members">
+    The Ecosystem Lead can update member statuses via `PUT /ecosystem/member/status`, remove members via `DELETE /ecosystem/member`, and view all members with `GET /ecosystem/members`.
+  </Step>
+</Steps>
+
+---
+
+## Endpoints
+
+### Create Ecosystem
+
+<ParamField body="name" type="string" required>
+  Display name for the ecosystem. Between 2 and 50 characters.
+</ParamField>
+
+<ParamField body="description" type="string" required>
+  Human-readable description. Between 2 and 255 characters.
+</ParamField>
+
+<ParamField body="tags" type="string">
+  Optional comma-separated tags for categorizing the ecosystem.
+</ParamField>
+
+<ParamField body="logo" type="string">
+  Optional URL for the ecosystem logo image.
+</ParamField>
+
+<ParamField query="orgId" type="string (UUID)" required>
+  The UUID of the organization creating the ecosystem. Must be a valid UUID v4.
+</ParamField>
+
+```bash
+curl -X POST https://localhost:5000/v1/ecosystem?orgId=6e672a9c-64f0-4d98-b312-f578f633800b \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Healthcare Trust Network",
+    "description": "A multi-org trust framework for healthcare credential issuance and verification.",
+    "tags": "healthcare,credentials",
+    "logo": "https://example.com/logo.png"
+  }'
+```
+
+<ResponseField name="statusCode" type="number">
+  HTTP status code. `201` on success.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable result message.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The newly created ecosystem object.
+</ResponseField>
+
+---
+
+### Get All Ecosystems
+
+Retrieves all ecosystems accessible to the authenticated user. Supports pagination and sorting.
+
+**Required roles:** `PLATFORM_ADMIN`, `ECOSYSTEM_LEAD`, or `ECOSYSTEM_MEMBER`
+
+<ParamField query="orgId" type="string (UUID)" required>
+  The UUID of the requesting organization.
+</ParamField>
+
+<ParamField query="pageNumber" type="number">
+  Page number for pagination (default: `1`).
+</ParamField>
+
+<ParamField query="pageSize" type="number">
+  Number of results per page.
+</ParamField>
+
+<ParamField query="sortBy" type="string">
+  Sort direction. Enum: `asc`, `desc` (default: `desc`).
+</ParamField>
+
+<ParamField query="sortField" type="string">
+  Field to sort by. Enum: `createDateTime`, `name` (default: `createDateTime`).
+</ParamField>
+
+<ParamField query="search" type="string">
+  Optional keyword to filter ecosystems by name.
+</ParamField>
+
+```bash
+curl -X GET "https://localhost:5000/v1/ecosystem?orgId=6e672a9c-64f0-4d98-b312-f578f633800b&pageNumber=1&pageSize=10&sortBy=desc" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Get Ecosystem Dashboard
+
+Retrieves details for a specific ecosystem and organization pairing.
+
+**Required roles:** `PLATFORM_ADMIN`, `OWNER`, or `ADMIN`
+
+<ParamField path="ecosystemId" type="string (UUID)" required>
+  UUID of the target ecosystem.
+</ParamField>
+
+<ParamField path="orgId" type="string (UUID)" required>
+  UUID of the organization requesting dashboard data.
+</ParamField>
+
+```bash
+curl -X GET https://localhost:5000/v1/ecosystem/61ec22e3-9158-409d-874d-345ad2fc51e4/org/6e672a9c-64f0-4d98-b312-f578f633800b \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Invite Member to Ecosystem
+
+Sends an invitation to an organization to join an ecosystem.
+
+**Required role:** `ECOSYSTEM_LEAD`
+
+<ParamField body="orgId" type="string (UUID)" required>
+  UUID of the organization being invited.
+</ParamField>
+
+<ParamField body="ecosystemId" type="string (UUID)" required>
+  UUID of the target ecosystem.
+</ParamField>
+
+```bash
+curl -X POST https://localhost:5000/v1/ecosystem/invitation \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "orgId": "6e672a9c-64f0-4d98-b312-f578f633800b",
+    "ecosystemId": "61ec22e3-9158-409d-874d-345ad2fc51e4"
+  }'
+```
+
+---
+
+### Update Invitation Status (Accept / Reject)
+
+Accepts or rejects a pending ecosystem membership invitation.
+
+<ParamField query="status" type="string" required>
+  The new invitation status. Enum: `accepted`, `rejected`.
+</ParamField>
+
+<ParamField body="ecosystemId" type="string (UUID)" required>
+  UUID of the ecosystem the invitation belongs to.
+</ParamField>
+
+<ParamField body="orgId" type="string (UUID)" required>
+  UUID of the organization accepting or rejecting the invitation.
+</ParamField>
+
+```bash
+curl -X PUT "https://localhost:5000/v1/ecosystem/invitation/status?status=accepted" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ecosystemId": "61ec22e3-9158-409d-874d-345ad2fc51e4",
+    "orgId": "6e672a9c-64f0-4d98-b312-f578f633800b"
+  }'
+```
+
+---
+
+### Get Ecosystem Invitations
+
+Retrieves all ecosystem membership invitations visible to the requesting organization.
+
+**Required role:** `OWNER`
+
+<ParamField query="orgId" type="string (UUID)" required>
+  UUID of the requesting organization.
+</ParamField>
+
+<ParamField query="role" type="string" required>
+  Filter invitations by view role. Enum: `ECOSYSTEM_LEAD`, `ECOSYSTEM_MEMBER`. When `ECOSYSTEM_LEAD`, `ecosystemId` is also required.
+</ParamField>
+
+<ParamField query="ecosystemId" type="string (UUID)">
+  Required when `role` is `ECOSYSTEM_LEAD`.
+</ParamField>
+
+<ParamField query="pageNumber" type="number">
+  Page number for pagination.
+</ParamField>
+
+<ParamField query="pageSize" type="number">
+  Number of results per page.
+</ParamField>
+
+```bash
+curl -X GET "https://localhost:5000/v1/ecosystem/invitations?orgId=6e672a9c-64f0-4d98-b312-f578f633800b&role=ECOSYSTEM_LEAD&ecosystemId=61ec22e3-9158-409d-874d-345ad2fc51e4" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Get Invitation Status (Ecosystem Creation)
+
+Returns the status of a pending invitation for ecosystem creation.
+
+<ParamField query="status" type="string" required>
+  Filter by invitation status. Enum: `accepted`, `pending`, `rejected` (default: `accepted`).
+</ParamField>
+
+```bash
+curl -X GET "https://localhost:5000/v1/ecosystem/invitation/status?status=pending" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Get Ecosystem Members
+
+Returns all organizations that are members of a given ecosystem.
+
+**Required role:** `ECOSYSTEM_LEAD`
+
+<ParamField query="ecosystemId" type="string (UUID)" required>
+  UUID of the ecosystem whose members to retrieve.
+</ParamField>
+
+<ParamField query="pageNumber" type="number">
+  Page number for pagination.
+</ParamField>
+
+<ParamField query="pageSize" type="number">
+  Number of results per page.
+</ParamField>
+
+```bash
+curl -X GET "https://localhost:5000/v1/ecosystem/members?ecosystemId=61ec22e3-9158-409d-874d-345ad2fc51e4&pageNumber=1&pageSize=20" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Delete Ecosystem Members
+
+Removes one or more member organizations from an ecosystem.
+
+**Required role:** `ECOSYSTEM_LEAD`
+
+<ParamField body="ecosystemId" type="string (UUID)" required>
+  UUID of the ecosystem from which members will be removed.
+</ParamField>
+
+<ParamField body="orgIds" type="string[]" required>
+  Array of organization UUIDs to remove. Must be non-empty; each entry must be a valid UUID v4.
+</ParamField>
+
+```bash
+curl -X DELETE https://localhost:5000/v1/ecosystem/member \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ecosystemId": "61ec22e3-9158-409d-874d-345ad2fc51e4",
+    "orgIds": [
+      "6e672a9c-64f0-4d98-b312-f578f633800b",
+      "2f1a5a3c-91a2-4c4b-9f7d-1b7e6a22a111"
+    ]
+  }'
+```
+
+---
+
+### Update Member Org Status
+
+Updates the ecosystem membership status (`ACCEPTED`, `REJECTED`, or `PENDING`) for one or more organizations.
+
+**Required role:** `ECOSYSTEM_LEAD`
+
+<ParamField query="status" type="string" required>
+  New status to apply. Enum: `ACCEPTED`, `REJECTED`, `PENDING`.
+</ParamField>
+
+<ParamField body="ecosystemId" type="string (UUID)" required>
+  UUID of the ecosystem.
+</ParamField>
+
+<ParamField body="orgIds" type="string[]" required>
+  Array of organization UUIDs to update. Must be non-empty; each entry must be a valid UUID v4.
+</ParamField>
+
+```bash
+curl -X PUT "https://localhost:5000/v1/ecosystem/member/status?status=ACCEPTED" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ecosystemId": "c78046ba-c98a-4785-80c6-06ad5167e74c",
+    "orgIds": ["ef93be23-d950-497c-a886-22fcd98370fe"]
+  }'
+```
+
+---
+
+## Error Responses
+
+| Status | Meaning |
+|---|---|
+| `400 Bad Request` | Missing or invalid parameters (e.g., malformed UUID, missing `ecosystemId`). |
+| `401 Unauthorized` | JWT token missing or expired. |
+| `403 Forbidden` | Insufficient role, or the ecosystem feature flag is disabled. |
+| `404 Not Found` | Ecosystem or organization records not found. |

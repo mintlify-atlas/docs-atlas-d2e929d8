@@ -1,0 +1,704 @@
+---
+title: "Connections"
+description: "Establish and manage DIDComm peer-to-peer connections between agents using invitation-based and out-of-band flows."
+---
+
+A connection represents a DIDComm peer-to-peer channel established between two agents. Once a connection is active, both parties can exchange verifiable credentials, proof requests, and basic messages without disclosing their DIDs to third parties. CREDEBL supports two connection methods:
+
+- **Invitation-based** — one agent creates an invitation object or URL; the peer accepts it to complete the handshake.
+- **Out-of-band (OOB)** — an invitation is shared as a URL or QR code and can be scanned by any compatible agent. OOB invitations may be single-use or reusable (`multiUseInvitation`).
+
+## Base path
+
+All endpoints are rooted at `/orgs/:orgId/connections` or `/orgs/:orgId/question-answer`.
+
+## Authentication
+
+Every endpoint requires a JWT bearer token.
+
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+## Role-based access
+
+| Role | Allowed operations |
+|------|--------------------|
+| `owner`, `admin`, `issuer`, `verifier`, `member` | Read connections, create invitations |
+| `owner` | Delete all connection records |
+| `owner`, `admin`, `issuer`, `verifier`, `member`, `holder`, `super_admin`, `platform_admin` | Send questions and basic messages |
+
+## Endpoints
+
+<CardGroup cols={2}>
+  <Card title="List connections" icon="list" href="/api-reference/connections/overview#list-connections">
+    `GET /orgs/:orgId/connections` — Paginated list of all connections for an organization.
+  </Card>
+  <Card title="Get connection" icon="link" href="/api-reference/connections/overview#get-connection-by-id">
+    `GET /orgs/:orgId/connections/:connectionId` — Retrieve a single connection by its ID.
+  </Card>
+  <Card title="Create invitation" icon="plus" href="/api-reference/connections/overview#create-connection-invitation">
+    `POST /orgs/:orgId/connections` — Create an outbound OOB connection invitation.
+  </Card>
+  <Card title="Receive invitation URL" icon="arrow-down" href="/api-reference/connections/overview#receive-invitation-url">
+    `POST /orgs/:orgId/receive-invitation-url` — Accept an invitation delivered as a URL.
+  </Card>
+  <Card title="Receive invitation object" icon="envelope-open" href="/api-reference/connections/overview#receive-invitation-object">
+    `POST /orgs/:orgId/receive-invitation` — Accept an invitation delivered as a JSON object.
+  </Card>
+  <Card title="Send question" icon="circle-question" href="/api-reference/connections/overview#send-question">
+    `POST /orgs/:orgId/question-answer/question/:connectionId` — Send a question-and-answer message over a connection.
+  </Card>
+  <Card title="Get Q&A records" icon="inbox" href="/api-reference/connections/overview#get-question-answer-records">
+    `GET /orgs/:orgId/question-answer/question` — Retrieve all question-answer records for an organization.
+  </Card>
+  <Card title="Send basic message" icon="message" href="/api-reference/connections/overview#send-basic-message">
+    `POST /orgs/:orgId/basic-message/:connectionId` — Send a plain-text message over a connection.
+  </Card>
+  <Card title="Delete connections" icon="trash" href="/api-reference/connections/overview#delete-connections">
+    `DELETE /orgs/:orgId/connections` — Delete all connection records for an organization.
+  </Card>
+</CardGroup>
+
+---
+
+## List connections
+
+`GET /orgs/:orgId/connections`
+
+Retrieve all connections for an organization. Supports pagination, full-text search, and sorting.
+
+**Required roles:** `owner`, `admin`, `issuer`, `verifier`, `member`
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization.
+</ParamField>
+
+### Query parameters
+
+<ParamField query="pageNumber" type="number">
+  Page to retrieve. Defaults to `1`.
+</ParamField>
+
+<ParamField query="pageSize" type="number">
+  Number of records per page. Min `1`, max `100`. Defaults to `10`.
+</ParamField>
+
+<ParamField query="searchByText" type="string">
+  Free-text search across connection fields.
+</ParamField>
+
+<ParamField query="sortField" type="string">
+  Field to sort by. Enum: `createDateTime` (default) and other available sort fields.
+</ParamField>
+
+<ParamField query="sortBy" type="string">
+  Sort direction. `ASC` or `DESC` (default).
+</ParamField>
+
+### Response
+
+<ResponseField name="statusCode" type="number">
+  `200` on success.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable result message.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  <Expandable title="properties" defaultOpen>
+    <ResponseField name="totalItems" type="number">
+      Total number of connections matching the query.
+    </ResponseField>
+    <ResponseField name="hasNextPage" type="boolean">
+      Whether a next page exists.
+    </ResponseField>
+    <ResponseField name="connections" type="object[]">
+      Array of connection records. Each record includes `id`, `state`, `theirLabel`, `did`, `theirDid`, `createdAt`, `updatedAt`, and `outOfBandId`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Examples
+
+<CodeGroup>
+
+```bash curl
+curl --request GET \
+  --url "http://localhost:5000/v1/orgs/3fa85f64-5717-4562-b3fc-2c963f66afa6/connections?pageNumber=1&pageSize=10&sortBy=DESC" \
+  --header "Authorization: Bearer <your-jwt-token>"
+```
+
+```javascript JavaScript (fetch)
+const response = await fetch(
+  'http://localhost:5000/v1/orgs/3fa85f64-5717-4562-b3fc-2c963f66afa6/connections?pageNumber=1&pageSize=10',
+  { headers: { Authorization: 'Bearer <your-jwt-token>' } }
+);
+const data = await response.json();
+```
+
+</CodeGroup>
+
+```json 200 response
+{
+  "statusCode": 200,
+  "message": "Connections fetched successfully",
+  "data": {
+    "totalItems": 2,
+    "hasNextPage": false,
+    "connections": [
+      {
+        "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+        "state": "completed",
+        "theirLabel": "Alice",
+        "did": "did:peer:1zQmXyz...",
+        "theirDid": "did:peer:1zQmAbc...",
+        "createdAt": "2024-01-15T10:30:00.000Z",
+        "updatedAt": "2024-01-15T10:30:45.000Z",
+        "outOfBandId": "a5cc3c28-db5e-4da4-8d29-37d7ab8b67a1"
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Get connection by ID
+
+`GET /orgs/:orgId/connections/:connectionId`
+
+Retrieve the details of a specific connection.
+
+**Required roles:** `owner`, `admin`, `issuer`, `verifier`, `member`
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization.
+</ParamField>
+
+<ParamField path="connectionId" type="string" required>
+  UUID of the connection to retrieve.
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash curl
+curl --request GET \
+  --url "http://localhost:5000/v1/orgs/3fa85f64-5717-4562-b3fc-2c963f66afa6/connections/7c9e6679-7425-40de-944b-e07fc1f90ae7" \
+  --header "Authorization: Bearer <your-jwt-token>"
+```
+
+</CodeGroup>
+
+```json 200 response
+{
+  "statusCode": 200,
+  "message": "Connection fetched successfully",
+  "data": {
+    "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "state": "completed",
+    "role": "inviter",
+    "did": "did:peer:1zQmXyz...",
+    "theirDid": "did:peer:1zQmAbc...",
+    "theirLabel": "Alice",
+    "autoAcceptConnection": true,
+    "protocol": "https://didcomm.org/connections/1.0",
+    "outOfBandId": "a5cc3c28-db5e-4da4-8d29-37d7ab8b67a1",
+    "threadId": "b0f49aa6-1516-4b21-9190-b13e92c0c865",
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "updatedAt": "2024-01-15T10:30:45.000Z"
+  }
+}
+```
+
+| Status | Description |
+|--------|-------------|
+| `400 Bad Request` | `connectionId` is not a valid UUID. |
+| `401 Unauthorized` | Missing or invalid bearer token. |
+| `403 Forbidden` | Authenticated user lacks the required role. |
+
+---
+
+## Create connection invitation
+
+`POST /orgs/:orgId/connections`
+
+Creates an outbound out-of-band connection invitation. The response contains an invitation URL and object that the peer can use to establish a connection.
+
+**Required roles:** `owner`, `admin`, `issuer`, `verifier`, `member`
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization creating the invitation.
+</ParamField>
+
+### Request body
+
+All fields are optional. When the body is omitted or left empty, a default invitation is created.
+
+<ParamField body="label" type="string">
+  Human-readable label to display to the recipient.
+</ParamField>
+
+<ParamField body="alias" type="string">
+  Internal alias for this invitation.
+</ParamField>
+
+<ParamField body="imageUrl" type="string">
+  URL of an image to include in the invitation.
+</ParamField>
+
+<ParamField body="goalCode" type="string">
+  A code expressing the intended goal of the connection (e.g., `"issue-vc"`).
+</ParamField>
+
+<ParamField body="goal" type="string">
+  A human-readable description of the connection's purpose.
+</ParamField>
+
+<ParamField body="handshake" type="boolean">
+  Whether to include a handshake protocol in the invitation. Defaults to `true`.
+</ParamField>
+
+<ParamField body="handshakeProtocols" type="string[]">
+  Array of DIDComm handshake protocol URIs to advertise. For example, `["https://didcomm.org/connections/1.0"]`.
+</ParamField>
+
+<ParamField body="multiUseInvitation" type="boolean">
+  When `true`, the invitation can be accepted by multiple peers. Defaults to `false`.
+</ParamField>
+
+<ParamField body="autoAcceptConnection" type="boolean">
+  Automatically accept the connection once the peer responds. Defaults to `false`.
+</ParamField>
+
+<ParamField body="IsReuseConnection" type="boolean">
+  Attempt to reuse an existing connection if one exists with the same peer.
+</ParamField>
+
+<ParamField body="recipientKey" type="string">
+  A specific recipient key (verkey) to use for this invitation.
+</ParamField>
+
+<ParamField body="invitationDid" type="string">
+  A DID to use as the invitation endpoint instead of a service endpoint.
+</ParamField>
+
+<ParamField body="routing" type="object">
+  Custom routing configuration for the invitation.
+</ParamField>
+
+<ParamField body="appendedAttachments" type="object[]">
+  Additional attachments to include in the OOB invitation message.
+</ParamField>
+
+<ParamField body="messages" type="object[]">
+  Pre-attached messages to deliver alongside the invitation.
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="object">
+  <Expandable title="properties" defaultOpen>
+    <ResponseField name="invitationUrl" type="string">
+      The full OOB invitation URL. Share this as a QR code or deep link.
+    </ResponseField>
+    <ResponseField name="invitation" type="object">
+      The raw DIDComm OOB invitation object.
+    </ResponseField>
+    <ResponseField name="outOfBandRecord" type="object">
+      The persisted OOB record created by the agent.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Examples
+
+<CodeGroup>
+
+```bash default invitation
+curl --request POST \
+  --url "http://localhost:5000/v1/orgs/3fa85f64-5717-4562-b3fc-2c963f66afa6/connections" \
+  --header "Authorization: Bearer <your-jwt-token>" \
+  --header "Content-Type: application/json" \
+  --data '{}'
+```
+
+```bash labeled multi-use invitation
+curl --request POST \
+  --url "http://localhost:5000/v1/orgs/3fa85f64-5717-4562-b3fc-2c963f66afa6/connections" \
+  --header "Authorization: Bearer <your-jwt-token>" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "label": "Acme Corp",
+    "goal": "Connect with Acme Corp to receive your employee credential",
+    "goalCode": "issue-vc",
+    "multiUseInvitation": true,
+    "autoAcceptConnection": true
+  }'
+```
+
+</CodeGroup>
+
+```json 201 response
+{
+  "statusCode": 201,
+  "message": "Connection invitation created successfully",
+  "data": {
+    "invitationUrl": "http://agent.example.com?oob=eyJAdHlwZSI6Imh0dHBzOi8vZGlkY29tbS5vcmcvb3V0LW9mLWJhbmQvMS4xL2ludml0YXRpb24iLCJAaWQiOiJhNWNjM2MyOC1kYjVlLTRkYTQtOGQyOS0zN2Q3YWI4YjY3YTEiLCJsYWJlbCI6IkFjbWUgQ29ycCIsImhhbmRzaGFrZV9wcm90b2NvbHMiOlsiaHR0cHM6Ly9kaWRjb21tLm9yZy9jb25uZWN0aW9ucy8xLjAiXSwic2VydmljZXMiOlt7ImlkIjoiI2lubGluZSIsInR5cGUiOiJEaWRDb21tTWVzc2FnaW5nIiwicmVjaXBpZW50S2V5cyI6WyJkaWQ6a2V5OnpYeXoiXSwic2VydmljZUVuZHBvaW50IjoiaHR0cDovL2FnZW50LmV4YW1wbGUuY29tIn1dfQ==",
+    "invitation": {
+      "@type": "https://didcomm.org/out-of-band/1.1/invitation",
+      "@id": "a5cc3c28-db5e-4da4-8d29-37d7ab8b67a1",
+      "label": "Acme Corp",
+      "handshake_protocols": ["https://didcomm.org/connections/1.0"],
+      "services": [
+        {
+          "id": "#inline",
+          "type": "did-communication",
+          "recipientKeys": ["did:key:zXyz..."],
+          "serviceEndpoint": "http://agent.example.com"
+        }
+      ]
+    }
+  }
+}
+```
+
+---
+
+## Receive invitation URL
+
+`POST /orgs/:orgId/receive-invitation-url`
+
+Accept an OOB invitation delivered as a URL string. The agent parses the URL and completes the connection handshake.
+
+**Required roles:** `owner`, `admin`
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization accepting the invitation.
+</ParamField>
+
+### Request body
+
+<ParamField body="invitationUrl" type="string" required>
+  The full OOB invitation URL to accept.
+</ParamField>
+
+<ParamField body="alias" type="string">
+  Internal alias for the resulting connection.
+</ParamField>
+
+<ParamField body="label" type="string">
+  Display label for the resulting connection.
+</ParamField>
+
+<ParamField body="autoAcceptConnection" type="boolean">
+  Automatically complete the connection handshake. Defaults to `false`.
+</ParamField>
+
+<ParamField body="autoAcceptInvitation" type="boolean">
+  Automatically accept the invitation without user confirmation. Defaults to `false`.
+</ParamField>
+
+<ParamField body="reuseConnection" type="boolean">
+  Attempt to reuse an existing connection with the same peer.
+</ParamField>
+
+<ParamField body="acceptInvitationTimeoutMs" type="number">
+  Timeout in milliseconds to wait for the peer to respond.
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url "http://localhost:5000/v1/orgs/3fa85f64-5717-4562-b3fc-2c963f66afa6/receive-invitation-url" \
+  --header "Authorization: Bearer <your-jwt-token>" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "invitationUrl": "http://agent.example.com?oob=eyJAdHlwZSI6...",
+    "autoAcceptConnection": true,
+    "autoAcceptInvitation": true
+  }'
+```
+
+</CodeGroup>
+
+---
+
+## Receive invitation object
+
+`POST /orgs/:orgId/receive-invitation`
+
+Accept an OOB invitation delivered as a raw JSON invitation object.
+
+**Required roles:** `owner`, `admin`
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization accepting the invitation.
+</ParamField>
+
+### Request body
+
+<ParamField body="invitation" type="object" required>
+  The DIDComm invitation object.
+
+  <Expandable title="invitation fields">
+    <ParamField body="@id" type="string">
+      Unique identifier for the invitation message.
+    </ParamField>
+    <ParamField body="@type" type="string" required>
+      DIDComm message type URI, for example `"https://didcomm.org/out-of-band/1.1/invitation"`.
+    </ParamField>
+    <ParamField body="label" type="string" required>
+      Human-readable label for the inviter.
+    </ParamField>
+    <ParamField body="goalCode" type="string">
+      Intended goal code.
+    </ParamField>
+    <ParamField body="goal" type="string">
+      Human-readable goal description.
+    </ParamField>
+    <ParamField body="handshake_protocols" type="string[]">
+      Array of supported handshake protocol URIs.
+    </ParamField>
+    <ParamField body="services" type="object[]" required>
+      Array of service endpoint objects. Each must include `id`, `type`, `serviceEndpoint` (URL), and `recipientKeys` (string array).
+    </ParamField>
+    <ParamField body="imageUrl" type="string">
+      Optional image URL included in the invitation.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="alias" type="string">
+  Internal alias for the resulting connection.
+</ParamField>
+
+<ParamField body="autoAcceptConnection" type="boolean">
+  Automatically complete the handshake.
+</ParamField>
+
+<ParamField body="autoAcceptInvitation" type="boolean">
+  Automatically accept without user confirmation.
+</ParamField>
+
+<ParamField body="reuseConnection" type="boolean">
+  Attempt to reuse an existing connection with the same peer.
+</ParamField>
+
+---
+
+## Send question
+
+`POST /orgs/:orgId/question-answer/question/:connectionId`
+
+Send a question-and-answer message to a connected peer. The peer receives a list of valid text responses and must pick one.
+
+**Required roles:** `owner`, `admin`, `issuer`, `verifier`, `member`, `holder`, `super_admin`, `platform_admin`
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization.
+</ParamField>
+
+<ParamField path="connectionId" type="string" required>
+  ID of the connection over which to send the question.
+</ParamField>
+
+### Request body
+
+<ParamField body="question" type="string" required>
+  The question text to send to the peer. Example: `"What is your name?"`.
+</ParamField>
+
+<ParamField body="validResponses" type="object[]" required>
+  Array of valid response objects the peer may choose from. Each object must have a `text` (string) field.
+
+  Example: `[{ "text": "Emma" }, { "text": "Kiva" }]`
+</ParamField>
+
+<ParamField body="detail" type="string">
+  Optional supplementary detail or context for the question.
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url "http://localhost:5000/v1/orgs/3fa85f64-5717-4562-b3fc-2c963f66afa6/question-answer/question/7c9e6679-7425-40de-944b-e07fc1f90ae7" \
+  --header "Authorization: Bearer <your-jwt-token>" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "question": "Which department do you belong to?",
+    "detail": "Please select your department for credential issuance.",
+    "validResponses": [
+      { "text": "Engineering" },
+      { "text": "Finance" },
+      { "text": "Legal" }
+    ]
+  }'
+```
+
+</CodeGroup>
+
+```json 201 response
+{
+  "statusCode": 201,
+  "message": "Question sent successfully",
+  "data": {
+    "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "state": "question-sent",
+    "questionText": "Which department do you belong to?",
+    "questionDetail": "Please select your department for credential issuance.",
+    "validResponses": [
+      { "text": "Engineering" },
+      { "text": "Finance" },
+      { "text": "Legal" }
+    ],
+    "connectionId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "createdAt": "2024-01-15T11:00:00.000Z"
+  }
+}
+```
+
+---
+
+## Get question-answer records
+
+`GET /orgs/:orgId/question-answer/question`
+
+Retrieve all question-answer records for the organization.
+
+**Required roles:** `owner`, `admin`, `issuer`, `verifier`, `member`, `holder`, `super_admin`, `platform_admin`
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization.
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash curl
+curl --request GET \
+  --url "http://localhost:5000/v1/orgs/3fa85f64-5717-4562-b3fc-2c963f66afa6/question-answer/question" \
+  --header "Authorization: Bearer <your-jwt-token>"
+```
+
+</CodeGroup>
+
+---
+
+## Send basic message
+
+`POST /orgs/:orgId/basic-message/:connectionId`
+
+Send a plain-text DIDComm basic message to a connected peer.
+
+**Required roles:** `owner`, `admin`, `issuer`, `verifier`, `member`, `holder`, `super_admin`, `platform_admin`
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization.
+</ParamField>
+
+<ParamField path="connectionId" type="string" required>
+  UUID of the connection to message.
+</ParamField>
+
+### Request body
+
+<ParamField body="content" type="string">
+  The plain-text message body to send.
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url "http://localhost:5000/v1/orgs/3fa85f64-5717-4562-b3fc-2c963f66afa6/basic-message/7c9e6679-7425-40de-944b-e07fc1f90ae7" \
+  --header "Authorization: Bearer <your-jwt-token>" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "content": "Hello! Your credential is ready for collection."
+  }'
+```
+
+</CodeGroup>
+
+```json 201 response
+{
+  "statusCode": 201,
+  "message": "Basic message sent successfully",
+  "data": {
+    "id": "c2e43f80-9f3a-4b12-835d-ecb9e4f12abc",
+    "content": "Hello! Your credential is ready for collection.",
+    "connectionId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "createdAt": "2024-01-15T11:05:00.000Z"
+  }
+}
+```
+
+---
+
+## Delete connections
+
+`DELETE /orgs/:orgId/connections`
+
+Delete all connection records associated with an organization. This action is irreversible.
+
+**Required roles:** `owner`
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization whose connection records will be deleted.
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash curl
+curl --request DELETE \
+  --url "http://localhost:5000/v1/orgs/3fa85f64-5717-4562-b3fc-2c963f66afa6/connections" \
+  --header "Authorization: Bearer <your-jwt-token>"
+```
+
+</CodeGroup>
+
+```json 200 response
+{
+  "statusCode": 200,
+  "message": "Connection records deleted successfully"
+}
+```
+
+| Status | Description |
+|--------|-------------|
+| `400 Bad Request` | `orgId` is not a valid UUID. |
+| `401 Unauthorized` | Missing or invalid bearer token. |
+| `403 Forbidden` | Authenticated user does not have the `owner` role. |

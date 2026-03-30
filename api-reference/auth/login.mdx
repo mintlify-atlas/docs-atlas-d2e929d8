@@ -1,0 +1,419 @@
+---
+title: "Login and session management"
+description: "Sign in, refresh tokens, sign out, and manage user sessions."
+---
+
+## Sign in
+
+`POST /auth/signin`
+
+Authenticates a registered user and returns a JWT access token together with a refresh token.
+
+### Request body
+
+<ParamField body="email" type="string" required>
+  The user's email address. Must be a valid email format. Leading and trailing
+  whitespace is stripped automatically.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  The user's password.
+</ParamField>
+
+### Response
+
+<ResponseField name="statusCode" type="number">
+  HTTP status code. `200` on success.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable result message.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  <Expandable title="properties" defaultOpen>
+    <ResponseField name="access_token" type="string">
+      JWT Bearer token to include in subsequent requests. RS256-signed.
+    </ResponseField>
+    <ResponseField name="token_type" type="string">
+      Always `"Bearer"`.
+    </ResponseField>
+    <ResponseField name="expires_in" type="number">
+      Seconds until the access token expires (for example, `86400` for 24 hours).
+    </ResponseField>
+    <ResponseField name="scope" type="string">
+      Space-separated list of OAuth scopes granted to the token (for example, `"email profile"`).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Examples
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url http://localhost:5000/v1/auth/signin \
+  --header "Content-Type: application/json" \
+  --data '{
+    "email": "alice@example.com",
+    "password": "S3cureP@ss!"
+  }'
+```
+
+```javascript JavaScript (fetch)
+const response = await fetch('http://localhost:5000/v1/auth/signin', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    email: 'alice@example.com',
+    password: 'S3cureP@ss!',
+  }),
+});
+const data = await response.json();
+const token = data.data.access_token;
+```
+
+</CodeGroup>
+
+```json 200 response
+{
+  "statusCode": 200,
+  "message": "User logged in successfully",
+  "data": {
+    "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "token_type": "Bearer",
+    "expires_in": 86400,
+    "scope": "email profile"
+  }
+}
+```
+
+### Error responses
+
+| Status | Description |
+|--------|-------------|
+| `400 Bad Request` | Request body is missing or malformed. |
+| `401 Unauthorized` | Email or password is incorrect, or the email is not verified. |
+
+---
+
+## Refresh token
+
+`POST /auth/refresh-token`
+
+Generates a new access token using a valid refresh token. Use this endpoint when the current access token has expired.
+
+### Request body
+
+<ParamField body="refreshToken" type="string" required>
+  The refresh token received at sign-in.
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url http://localhost:5000/v1/auth/refresh-token \
+  --header "Content-Type: application/json" \
+  --data '{
+    "refreshToken": "<your-refresh-token>"
+  }'
+```
+
+</CodeGroup>
+
+```json 200 response
+{
+  "statusCode": 200,
+  "message": "Token refreshed successfully",
+  "data": {
+    "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "token_type": "Bearer",
+    "expires_in": 86400,
+    "scope": "email profile"
+  }
+}
+```
+
+---
+
+## Sign out
+
+`POST /auth/signout`
+
+Invalidates the current session. Requires a valid Bearer token.
+
+<Note>
+  This endpoint requires the `Authorization: Bearer <token>` header.
+</Note>
+
+### Request body
+
+<ParamField body="sessions" type="string[]">
+  Optional list of specific session IDs to invalidate. When omitted, the
+  current session is invalidated.
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash sign out current session
+curl --request POST \
+  --url http://localhost:5000/v1/auth/signout \
+  --header "Authorization: Bearer <your-jwt-token>" \
+  --header "Content-Type: application/json" \
+  --data '{}'
+```
+
+```bash sign out specific sessions
+curl --request POST \
+  --url http://localhost:5000/v1/auth/signout \
+  --header "Authorization: Bearer <your-jwt-token>" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "sessions": [
+      "3f2e1d4c-0000-0000-0000-000000000001",
+      "3f2e1d4c-0000-0000-0000-000000000002"
+    ]
+  }'
+```
+
+</CodeGroup>
+
+```json 200 response
+{
+  "statusCode": 200,
+  "message": "User logged out successfully"
+}
+```
+
+---
+
+## Forgot password
+
+`POST /auth/forgot-password`
+
+Sends a password-reset link to the user's email address.
+
+### Request body
+
+<ParamField body="email" type="string" required>
+  Email address of the account for which to initiate a password reset.
+</ParamField>
+
+<ParamField body="brandLogoUrl" type="string">
+  Optional URL of a brand logo to include in the reset email. Must include a
+  protocol and a valid TLD (for example, `https://example.com/logo.png`).
+</ParamField>
+
+<ParamField body="platformName" type="string">
+  Optional display name of the platform, used in the reset email body.
+</ParamField>
+
+<ParamField body="endpoint" type="string">
+  Optional base URL the reset link should point back to (for example,
+  `https://app.example.com`).
+</ParamField>
+
+<ParamField body="clientAlias" type="string">
+  Optional client alias to scope the reset link to a specific front-end client
+  (for example, `"VERIFIER"`).
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url http://localhost:5000/v1/auth/forgot-password \
+  --header "Content-Type: application/json" \
+  --data '{
+    "email": "alice@example.com"
+  }'
+```
+
+</CodeGroup>
+
+```json 200 response
+{
+  "statusCode": 200,
+  "message": "Password reset link sent"
+}
+```
+
+---
+
+## Reset password (token-based)
+
+`POST /auth/password-reset/:email`
+
+Completes the password-reset flow by setting a new password using the token delivered by email.
+
+### Path parameters
+
+<ParamField path="email" type="string" required>
+  The email address of the account whose password is being reset.
+</ParamField>
+
+### Request body
+
+<ParamField body="password" type="string" required>
+  The new password to set for the account.
+</ParamField>
+
+<ParamField body="token" type="string" required>
+  The verification token received in the password-reset email.
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url "http://localhost:5000/v1/auth/password-reset/alice%40example.com" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "password": "N3wS3cureP@ss!",
+    "token": "abc123verificationtoken"
+  }'
+```
+
+</CodeGroup>
+
+```json 200 response
+{
+  "statusCode": 200,
+  "message": "Password reset successfully"
+}
+```
+
+---
+
+## Reset password (authenticated)
+
+`POST /auth/reset-password`
+
+Allows a signed-in user to change their password by providing their current password.
+
+### Request body
+
+<ParamField body="email" type="string" required>
+  The user's email address.
+</ParamField>
+
+<ParamField body="oldPassword" type="string" required>
+  The user's current password.
+</ParamField>
+
+<ParamField body="newPassword" type="string" required>
+  The new password. Must be different from `oldPassword`.
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url http://localhost:5000/v1/auth/reset-password \
+  --header "Content-Type: application/json" \
+  --data '{
+    "email": "alice@example.com",
+    "oldPassword": "S3cureP@ss!",
+    "newPassword": "N3wS3cureP@ss!"
+  }'
+```
+
+</CodeGroup>
+
+```json 200 response
+{
+  "statusCode": 200,
+  "message": "Password reset successfully"
+}
+```
+
+---
+
+## Get all sessions
+
+`GET /auth/:userId/sessions`
+
+Returns all active sessions for the specified user. Requires a valid Bearer token. Users may only retrieve their own sessions.
+
+<Note>
+  This endpoint requires the `Authorization: Bearer <token>` header.
+</Note>
+
+### Path parameters
+
+<ParamField path="userId" type="string" required>
+  UUID of the user whose sessions to retrieve. Must match the authenticated
+  user's ID.
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash curl
+curl --request GET \
+  --url "http://localhost:5000/v1/auth/d8b9b81b-7232-4a7f-b9d3-4f7226129677/sessions" \
+  --header "Authorization: Bearer <your-jwt-token>"
+```
+
+</CodeGroup>
+
+| Status | Description |
+|--------|-------------|
+| `401 Unauthorized` | No or invalid Bearer token. |
+| `403 Forbidden` | The authenticated user is trying to access another user's sessions. |
+
+---
+
+## Delete a session
+
+`DELETE /auth/:sessionId/sessions`
+
+Deletes a specific session by its ID. Requires a valid Bearer token.
+
+<Note>
+  This endpoint requires the `Authorization: Bearer <token>` header.
+</Note>
+
+### Path parameters
+
+<ParamField path="sessionId" type="string" required>
+  UUID of the session record to delete.
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash curl
+curl --request DELETE \
+  --url "http://localhost:5000/v1/auth/3f2e1d4c-0000-0000-0000-000000000001/sessions" \
+  --header "Authorization: Bearer <your-jwt-token>"
+```
+
+</CodeGroup>
+
+```json 200 response
+{
+  "statusCode": 200,
+  "message": "Session deleted successfully"
+}
+```
+
+| Status | Description |
+|--------|-------------|
+| `400 Bad Request` | The session ID is not a valid UUID. |
+| `401 Unauthorized` | No or invalid Bearer token. |
+| `403 Forbidden` | The authenticated user does not own the session. |

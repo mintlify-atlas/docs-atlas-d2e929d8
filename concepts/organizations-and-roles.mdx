@@ -1,0 +1,179 @@
+---
+title: "Organizations and Roles"
+description: "How CREDEBL's multi-tenant organizational model works, role-based access control, member invitations, and machine-to-machine client credentials."
+---
+
+An **organization** is the primary multi-tenant unit in CREDEBL. Every operation — issuing credentials, requesting proofs, creating schemas, and managing agents — is scoped to an organization. Users can belong to multiple organizations, each with a different role.
+
+## Organization creation workflow
+
+<Steps>
+  <Step title="Create the organization">
+    A user calls `POST /orgs` with a name, optional logo, and other metadata. The authenticated user is automatically assigned the `owner` role for the new organization.
+  </Step>
+  <Step title="Provision an agent">
+    After creation, the owner provisions a dedicated or shared agent for the organization. The agent spin-up process creates a wallet and registers a DID on the chosen ledger.
+  </Step>
+  <Step title="Invite members">
+    The owner or admin sends invitations via `POST /orgs/:orgId/invitations`. Each invitation specifies the invitee's email address and their intended role.
+  </Step>
+  <Step title="Invitee accepts">
+    The invitee receives an email and accepts the invitation. Their invitation status transitions from `pending` → `accepted`. Rejection is also possible (`rejected`), and accepted and rejected states are terminal.
+  </Step>
+  <Step title="Assign or update roles">
+    An owner or admin can update a member's roles at any time using `PUT /orgs/:orgId/user-roles/:userId`.
+  </Step>
+</Steps>
+
+## Organization roles
+
+CREDEBL uses role-based access control (RBAC) defined by the `OrgRoles` enum. Each role grants specific permissions within an organization.
+
+| Role | Value | Description |
+|------|-------|-------------|
+| `owner` | `owner` | Full control of the organization. Can manage all members, roles, agents, and credentials. Can delete the organization. |
+| `admin` | `admin` | Manages members and roles. Can create schemas and credential definitions. Cannot delete the organization. |
+| `issuer` | `issuer` | Can issue credentials to holders and manage issuance records. |
+| `verifier` | `verifier` | Can send proof requests and verify presentations. |
+| `member` | `member` | Read-only access to organization resources (dashboard, credentials, proofs). |
+| `holder` | `holder` | Can view issued credentials for the organization. |
+| `super_admin` | `super_admin` | Elevated admin privileges within the organization. |
+| `platform_admin` | `platform_admin` | Platform-level administrator. Can register and map all organizations. |
+| `Ecosystem Lead` | `Ecosystem Lead` | Governs an ecosystem. Can invite and manage ecosystem member organizations. |
+| `Ecosystem Member` | `Ecosystem Member` | Participates in an ecosystem as a member organization. |
+
+### Role capabilities in detail
+
+<CardGroup cols={2}>
+  <Card title="Owner" icon="crown">
+    - Create, update, and delete the organization
+    - Invite and remove members
+    - Update member roles
+    - Access organization dashboard, users, DIDs, and invitations
+    - Manage agent and wallet configuration
+    - Create and delete client credentials
+    - Delete issuance and verification records
+    - Access activity count and all platform organisations (when Ecosystem Lead)
+  </Card>
+  <Card title="Admin" icon="shield-check">
+    - Invite and remove members
+    - Update member roles
+    - Create schemas and credential definitions
+    - Access organization dashboard, users, DIDs, and invitations
+    - Update organization details
+  </Card>
+  <Card title="Issuer" icon="badge-check">
+    - Create credential offers (including OOB offers via email)
+    - Upload CSV files for bulk issuance
+    - Download and manage bulk issuance templates
+    - Access issued credentials and file upload records
+    - Fetch organization schemas and credential definitions
+  </Card>
+  <Card title="Verifier" icon="magnifying-glass">
+    - Send proof requests to connections
+    - Send out-of-band proof requests
+    - Verify presented proofs
+    - Access proof presentation records
+    - Fetch schemas and credential definitions
+  </Card>
+</CardGroup>
+
+<CardGroup cols={2}>
+  <Card title="Member" icon="user">
+    - View organization dashboard
+    - View schemas, credential definitions, credentials, and proofs
+    - Read-only access — no issuance or verification actions
+  </Card>
+  <Card title="Ecosystem Lead" icon="network">
+    - Create and manage an ecosystem
+    - Invite organizations to the ecosystem
+    - Remove ecosystem members
+    - Update ecosystem member status (ACTIVE / INACTIVE)
+    - Access all platform organizations for ecosystem management
+  </Card>
+</CardGroup>
+
+### Permissions by endpoint
+
+Key endpoints and which roles can access them:
+
+| Endpoint | Allowed Roles |
+|----------|--------------|
+| `GET /orgs/:orgId` | `owner`, `admin`, `issuer`, `verifier`, `member` |
+| `PUT /orgs/:orgId` | `owner`, `admin` |
+| `DELETE /orgs/:orgId` | `owner` |
+| `GET /orgs/:orgId/roles` | `owner`, `admin` |
+| `POST /orgs/:orgId/invitations` | `owner`, `super_admin`, `admin` |
+| `PUT /orgs/:orgId/user-roles/:userId` | `owner`, `admin` |
+| `GET /orgs/:orgId/dids` | `owner`, `admin`, `issuer`, `member` |
+| `PUT /orgs/:orgId/primary-did` | `owner`, `admin`, `issuer`, `verifier`, `member` |
+| `POST /orgs/:orgId/client_credentials` | `owner` |
+| `POST /orgs/:orgId/credentials/offer` | `owner`, `admin`, `issuer` |
+| `POST /orgs/:orgId/proofs` | `owner`, `admin`, `verifier` |
+| `POST /orgs/:orgId/proofs/:proofId/verify` | `owner`, `admin`, `verifier` |
+
+## Public vs. private organizations
+
+Organizations can expose a **public profile** accessible without authentication via `GET /orgs/public-profiles/:orgSlug` and `GET /orgs/public-profile` (paginated list). Public profiles allow external parties to discover and learn about an organization without requiring membership.
+
+The private organization detail endpoint `GET /orgs/:orgId` requires authentication and an appropriate role within that organization.
+
+## Client credentials for machine-to-machine access
+
+For automated or server-to-server API access, CREDEBL supports **OAuth 2.0 client credentials**. This allows a backend application to authenticate as an organization without a user session.
+
+### Creating client credentials
+
+Only the organization `owner` can create client credentials:
+
+```http
+POST /orgs/:orgId/client_credentials
+```
+
+This returns a `clientId` and `clientSecret`. Store the secret securely — it cannot be retrieved again.
+
+### Obtaining an access token
+
+Exchange the client credentials for a bearer token:
+
+```http
+POST /orgs/:clientId/token
+Content-Type: application/json
+
+{
+  "clientId": "<client-id>",
+  "clientSecret": "<client-secret>"
+}
+```
+
+The response includes an access token and sets a `session_id` cookie. Use the token as a `Bearer` token in subsequent API calls.
+
+### Fetching existing credentials
+
+Members with `owner`, `admin`, `issuer`, `verifier`, or `member` roles can retrieve the current client ID (but not the secret) via:
+
+```http
+GET /orgs/:orgId/client_credentials
+```
+
+<Note>
+Client credentials are scoped to a single organization. Each organization has at most one client credential pair. Deleting and recreating credentials invalidates the previous secret.
+</Note>
+
+## Inviting members
+
+Invitations are sent in bulk by posting an array of email addresses with their intended roles:
+
+```http
+POST /orgs/:orgId/invitations
+Authorization: Bearer <token>
+
+{
+  "invitations": [
+    { "email": "alice@example.com", "orgRoles": ["issuer"] },
+    { "email": "bob@example.com", "orgRoles": ["verifier"] }
+  ]
+}
+```
+
+Pending invitations can be listed with `GET /orgs/:orgId/invitations` and deleted with `DELETE /orgs/:orgId/invitations/:invitationId`. Only `owner`, `super_admin`, and `admin` roles can send invitations.

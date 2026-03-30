@@ -1,0 +1,248 @@
+---
+title: "Running microservices locally"
+description: "Run each CREDEBL microservice individually from source for local development and debugging."
+---
+
+## When to use this approach
+
+Run services individually from source when you need to:
+
+- Develop or debug a specific microservice with live reload
+- Step through service code with a debugger
+- Test changes before building a Docker image
+- Run a subset of services while keeping others in Docker
+
+For a full production-equivalent deployment, use [Docker Compose](/deployment/docker-compose) instead.
+
+## Prerequisites
+
+- Node.js 18.17.0 or later
+- pnpm (installed globally)
+- NestJS CLI
+
+```bash
+npm install -g pnpm
+npm install -g @nestjs/cli@latest
+```
+
+- Docker (for running PostgreSQL and NATS)
+- A clone of the repository
+
+## Setup
+
+<Steps>
+  <Step title="Clone the repository and install dependencies">
+    ```bash
+    git clone https://github.com/credebl/platform.git
+    cd platform
+    npm install
+    ```
+  </Step>
+
+  <Step title="Configure environment variables">
+    ```bash
+    cp .env.sample .env
+    ```
+
+    Open `.env` and set all required values. At minimum, the following must be configured before any service will connect successfully:
+
+    - `DATABASE_URL` — PostgreSQL connection string
+    - `NATS_URL` — e.g. `nats://0.0.0.0:4222`
+    - `REDIS_HOST` and `REDIS_PORT`
+    - All `*_NKEY_SEED` variables for the services you plan to run
+    - `PLATFORM_ADMIN_EMAIL`
+    - `CRYPTO_PRIVATE_KEY`
+    - `KEYCLOAK_DOMAIN`, `KEYCLOAK_REALM`, `KEYCLOAK_MANAGEMENT_CLIENT_ID`, `KEYCLOAK_MANAGEMENT_CLIENT_SECRET`
+  </Step>
+
+  <Step title="Start PostgreSQL">
+    Start a local PostgreSQL instance using Docker:
+
+    ```bash
+    docker run --name credebl-postgres \
+      -p 5432:5432 \
+      -e POSTGRES_USER=credebl \
+      -e POSTGRES_PASSWORD=changeme \
+      -e POSTGRES_DB=credebl \
+      -v credebl_pgdata:/var/lib/postgresql/data \
+      -d postgres:16
+    ```
+
+    Update `DATABASE_URL` in `.env` to match:
+
+    ```ini
+    DATABASE_URL="postgresql://credebl:changeme@localhost:5432/credebl?schema=public"
+    ```
+  </Step>
+
+  <Step title="Start NATS">
+    Pull and run the NATS message broker:
+
+    ```bash
+    docker pull nats:latest
+    docker compose up nats -d
+    ```
+
+    NATS listens on:
+    - `4222` — client connections
+    - `6222` — cluster routing
+    - `8222` — HTTP monitoring
+  </Step>
+
+  <Step title="Start Redis">
+    ```bash
+    docker compose up redis -d
+    ```
+
+    Redis listens on `6379`.
+  </Step>
+
+  <Step title="Run Prisma migrations and generate the client">
+    ```bash
+    cd libs/prisma-service/prisma
+    npx prisma generate
+    npx prisma db push
+    cd ..
+    ```
+  </Step>
+
+  <Step title="Seed initial data">
+    The seed script populates org roles, agent types, ledger configs, platform config, and the platform admin user. It reads master data from `prisma/data/credebl-master-table.json`.
+
+    ```bash
+    cd libs/prisma-service
+    npx prisma db seed
+    ```
+
+    This is equivalent to running the `seed` container in the Docker Compose deployment.
+  </Step>
+
+  <Step title="Start the API gateway">
+    Open a terminal and start the API gateway. Use `--watch` to enable live reload during development:
+
+    <CodeGroup>
+
+    ```bash development (watch)
+    nest start --watch
+    ```
+
+    ```bash production-like
+    nest start
+    ```
+
+    </CodeGroup>
+
+    The gateway binds to `http://0.0.0.0:5000`. The Swagger UI is available at `http://localhost:5000/api`.
+  </Step>
+
+  <Step title="Start each microservice">
+    Open a separate terminal window for each service. Start them in the order shown below, as later services depend on earlier ones being available on NATS.
+
+    <CodeGroup>
+
+    ```bash user
+    nest start user [--watch]
+    ```
+
+    ```bash ledger
+    nest start ledger [--watch]
+    ```
+
+    ```bash connection
+    nest start connection [--watch]
+    ```
+
+    ```bash issuance
+    nest start issuance [--watch]
+    ```
+
+    ```bash verification
+    nest start verification [--watch]
+    ```
+
+    ```bash agent-provisioning
+    nest start agent-provisioning [--watch]
+    ```
+
+    ```bash agent-service
+    nest start agent-service [--watch]
+    ```
+
+    </CodeGroup>
+
+    The full set of services and their commands:
+
+    | Service | Command |
+    |---|---|
+    | API gateway | `nest start [--watch]` |
+    | User | `nest start user [--watch]` |
+    | Organization | `nest start organization [--watch]` |
+    | Connection | `nest start connection [--watch]` |
+    | Issuance | `nest start issuance [--watch]` |
+    | Verification | `nest start verification [--watch]` |
+    | Ledger | `nest start ledger [--watch]` |
+    | Agent provisioning | `nest start agent-provisioning [--watch]` |
+    | Agent service | `nest start agent-service [--watch]` |
+
+    <Note>
+      `organization` and `utility` are not listed in the README's start sequence but are part of the platform. Start `utility` before `connection`, and `organization` before `verification` and `agent-provisioning`.
+    </Note>
+  </Step>
+</Steps>
+
+## NATS authentication (NKEY seeds)
+
+Each microservice authenticates to NATS using an NKey seed defined in `.env`. Set a unique seed for each service:
+
+```ini .env
+USER_NKEY_SEED=xxxxxxxxxxxxx
+API_GATEWAY_NKEY_SEED=xxxxxxxxxxxxx
+ORGANIZATION_NKEY_SEED=xxxxxxxxxxxxx
+AGENT_PROVISIONING_NKEY_SEED=xxxxxxxxxxxxx
+AGENT_SERVICE_NKEY_SEED=xxxxxxxxxxxxx
+VERIFICATION_NKEY_SEED=xxxxxxxxxxxxx
+ISSUANCE_NKEY_SEED=xxxxxxxxxxxxx
+CONNECTION_NKEY_SEED=xxxxxxxxxxxxx
+ECOSYSTEM_NKEY_SEED=xxxxxxxxxxxxx
+CREDENTAILDEFINITION_NKEY_SEED=xxxxxxxxxxxxx
+SCHEMA_NKEY_SEED=xxxxxxxxxxxxx
+UTILITIES_NKEY_SEED=xxxxxxxxxxxxx
+GEOLOCATION_NKEY_SEED=xxxxxxxxxxx
+X509_NKEY_SEED=xxxxxxxxxxx
+OIDC4VC_ISSUANCE_NKEY_SEED=xxxxxxxxxxx
+OIDC4VC_VERIFICATION_NKEY_SEED=xxxxxxxxxxx
+```
+
+The authentication type is controlled by `NATS_AUTH_TYPE` in `.env`. Supported values are `nkey`, `creds`, `usernamePassword`, and `none`. For local development, `nkey` is the default.
+
+## Accessing endpoints
+
+Once the API gateway and at least the `user` service are running, navigate to:
+
+```
+http://localhost:5000/api
+```
+
+The Swagger UI lists all registered routes. Routes provided by microservices that are not yet running will return NATS timeout errors.
+
+## Monitoring logs
+
+Each `nest start` process writes structured logs to stdout. For production-like log aggregation, set the following in `.env`:
+
+```ini .env
+CONSOLE_LOG_FLAG=true
+ELK_LOG=true
+LOG_LEVEL=debug
+ELK_LOG_PATH=http://localhost:9200/
+ELK_USERNAME=elastic
+ELK_PASSWORD=xxxxxx
+```
+
+OpenTelemetry tracing is also supported. Enable it with:
+
+```ini .env
+IS_ENABLE_OTEL=true
+OTEL_SERVICE_NAME=CREDEBL-PLATFORM-SERVICE
+OTEL_TRACES_OTLP_ENDPOINT=http://localhost:4318/v1/traces
+OTEL_LOGS_OTLP_ENDPOINT=http://localhost:4318/v1/logs
+```

@@ -1,80 +1,316 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Get from zero to issuing your first verifiable credential with CREDEBL in minutes."
 ---
 
-## Get started in three steps
+This guide walks you through cloning the platform, starting its infrastructure, and issuing a verifiable credential via the REST API.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before you begin, make sure you have the following installed:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+- **Docker** and **Docker Compose** — [Install Docker](https://docs.docker.com/engine/install/)
+- **Node.js** v18.17.0 or later — [Install Node.js](https://nodejs.dev/en/learn/how-to-install-nodejs/)
+- **pnpm** v9.15.3 or later — comes pinned in `package.json`
+- **NestJS CLI** — used to start individual microservices
 
-### Step 2: Deploy your changes
+```bash
+npm i -g @nestjs/cli@latest
+npm i -g pnpm
+```
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+<Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+<Step title="Clone and install dependencies">
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+Clone the platform repository and install all Node.js dependencies using pnpm.
 
-### Step 3: Go live
+```bash
+git clone https://github.com/credebl/platform.git
+cd platform
+pnpm install
+```
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+<Tip>
+  pnpm is declared as the package manager in `package.json`. Using npm or yarn
+  may result in dependency resolution issues.
+</Tip>
+
+</Step>
+
+<Step title="Start infrastructure services">
+
+The `docker-compose.yml` at the repository root starts NATS (message broker) and Redis (cache/queues). PostgreSQL is run separately via Docker.
+
+Start PostgreSQL:
+
+```bash
+docker run --name credebl-postgres \
+  -p 5432:5432 \
+  -e POSTGRES_USER=credebl \
+  -e POSTGRES_PASSWORD=changeme \
+  -e POSTGRES_DB=credebl \
+  -v credebl_pgdata:/var/lib/postgresql/data \
+  -d postgres:16
+```
+
+Start NATS and Redis:
+
+```bash
+docker-compose up -d nats redis
+```
+
+The services expose the following ports:
+
+| Service    | Port(s)               |
+| ---------- | --------------------- |
+| PostgreSQL | `5432`                |
+| NATS       | `4222`, `6222`, `8222`|
+| Redis      | `6379`                |
+
+<Note>
+  NATS is the message bus that all microservices use to communicate. It must be
+  running before you start any service.
+</Note>
+
+</Step>
+
+<Step title="Configure environment variables">
+
+Copy the sample environment file and populate it with your local values.
+
+```bash
+cp .env.sample .env
+```
+
+<Note>
+  The repository includes `.env.sample` with all available variables and inline comments.
+  The API Gateway reads `API_GATEWAY_PORT` (defaults to `5000`) and `API_GATEWAY_HOST`
+  at startup, along with NATS and database connection details.
+</Note>
+
+At minimum, set the following variables in your `.env` file:
+
+```bash
+# PostgreSQL
+DATABASE_URL=postgresql://credebl:changeme@localhost:5432/credebl
+
+# NATS
+NATS_URL=nats://localhost:4222
+
+# API Gateway
+API_GATEWAY_PORT=5000
+API_GATEWAY_HOST=0.0.0.0
+API_GATEWAY_PROTOCOL=http
+
+# Platform identity
+PLATFORM_NAME=CREDEBL
+PLATFORM_ADMIN_EMAIL=platform.admin@example.com
+PLATFORM_WALLET_NAME=platform-wallet
+PLATFORM_WALLET_PASSWORD=changeme
+PLATFORM_SEED=101111110111101100111100000Seed1
+```
+
+</Step>
+
+<Step title="Run database migrations and seed data">
+
+Generate the Prisma client and push the database schema, then seed the initial master data.
+
+```bash
+cd libs/prisma-service/prisma
+npx prisma generate
+npx prisma db push
+```
+
+Seed the initial data (ledger entries, roles, and platform defaults):
+
+```bash
+cd libs/prisma-service
+npx prisma db seed
+```
+
+<Note>
+  The `start` script in `package.json` also runs `npx prisma migrate deploy`
+  automatically before launching the API Gateway, so in production you can use
+  `npm run start` to handle migrations.
+</Note>
+
+</Step>
+
+<Step title="Start the API Gateway and microservices">
+
+Open a separate terminal window for each service. Start the API Gateway first, then bring up the remaining microservices.
+
+**API Gateway** (terminal 1):
+
+```bash
+nest start
+```
+
+For development with live-reload:
+
+```bash
+nest start --watch
+```
+
+**Core microservices** — each in its own terminal:
+
+<CodeGroup>
+
+```bash user
+nest start user --watch
+```
+
+```bash organization
+nest start organization --watch
+```
+
+```bash ledger
+nest start ledger --watch
+```
+
+```bash connection
+nest start connection --watch
+```
+
+```bash issuance
+nest start issuance --watch
+```
+
+```bash verification
+nest start verification --watch
+```
+
+```bash agent-provisioning
+nest start agent-provisioning --watch
+```
+
+```bash agent-service
+nest start agent-service --watch
+```
+
+</CodeGroup>
+
+<Tip>
+  Start services in the order listed above. `agent-service` waits until
+  `agent-provisioning` is listening on NATS before it initializes the platform
+  agent wallet.
+</Tip>
+
+</Step>
+
+<Step title="Access the Swagger UI">
+
+Once the API Gateway is running, open your browser and navigate to:
+
+```
+http://localhost:5000/api
+```
+
+The Swagger UI lists every available endpoint, grouped by resource. You can explore and test all APIs directly from this interface. The gateway serves API routes under URI-versioned paths (e.g., `/v1/...`).
+
+<Note>
+  Experimental OID4VC and x509 controller endpoints are hidden by default. Set
+  `HIDE_EXPERIMENTAL_OIDC_CONTROLLERS=false` in your `.env` to expose them in
+  the Swagger UI.
+</Note>
+
+</Step>
+
+<Step title="Register, create an organization, and issue a credential">
+
+The following sequence demonstrates the minimum steps to issue a verifiable credential: register a user, sign in, create an organization, and issue a credential over DIDComm.
+
+**1. Send a verification email**
+
+```bash
+curl -X POST http://localhost:5000/v1/auth/verification-mail \
+  -H "Content-Type: application/json" \
+  -d '{"email": "alice@example.com"}'
+```
+
+**2. Register the user** (after verifying the email link)
+
+```bash
+curl -X POST http://localhost:5000/v1/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "alice@example.com",
+    "firstName": "Alice",
+    "lastName": "Smith",
+    "password": "Passw0rd!",
+    "isEmailVerified": true
+  }'
+```
+
+**3. Sign in and capture your access token**
+
+```bash
+curl -X POST http://localhost:5000/v1/auth/signin \
+  -H "Content-Type: application/json" \
+  -d '{"email": "alice@example.com", "password": "Passw0rd!"}' \
+  | jq -r '.data.access_token'
+```
+
+Save the returned token as `TOKEN` for subsequent requests.
+
+**4. Create an organization**
+
+```bash
+curl -X POST http://localhost:5000/v1/orgs \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Acme Corp",
+    "description": "My first CREDEBL organization"
+  }'
+```
+
+Note the `id` field in the response — this is your `ORG_ID`.
+
+**5. Issue a credential out-of-band** (email delivery)
+
+```bash
+curl -X POST http://localhost:5000/v1/orgs/$ORG_ID/credentials/oob/email \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "credentialDefinitionId": "<your-cred-def-id>",
+    "comment": "Your first credential",
+    "attributes": [
+      {"name": "firstName", "value": "Alice"},
+      {"name": "lastName",  "value": "Smith"}
+    ],
+    "emailId": "alice@example.com"
+  }'
+```
+
+<Note>
+  Before issuing credentials you must create a schema and credential definition
+  for your organization. Use the `/v1/schemas` and
+  `/v1/orgs/:orgId/credential-definitions` endpoints visible in the Swagger UI.
+  Your organization also needs an active Hyperledger Aries agent — provision one
+  via the agent endpoints in Swagger.
+</Note>
+
+</Step>
+
+</Steps>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Architecture" icon="sitemap" href="/architecture">
+    Learn how the microservices communicate over NATS and how agents are provisioned per organization.
+  </Card>
+  <Card title="Environment variables" icon="gear" href="/configuration/environment-variables">
+    Full reference for all configuration options available in `.env`.
+  </Card>
+  <Card title="API reference" icon="code" href="/api-reference/auth/overview">
+    Explore every endpoint with request and response examples.
+  </Card>
+  <Card title="Docker Compose deployment" icon="docker" href="/deployment/docker-compose">
+    Run the entire platform stack — including all microservices — with a single command using pre-built images.
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

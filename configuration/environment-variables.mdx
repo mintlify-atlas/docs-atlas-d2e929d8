@@ -1,0 +1,766 @@
+---
+title: "Environment Variables"
+description: "Complete reference for all environment variables used to configure the CREDEBL platform."
+---
+
+Copy `.env.sample` from the repository root to `.env` and fill in the values before starting any service.
+
+<Warning>
+  Never commit `.env` to version control. Variables marked **Secret** contain credentials or private keys that must be kept out of source control and logs.
+</Warning>
+
+---
+
+## API Gateway
+
+<ParamField body="API_GATEWAY_HOST" type="string" required>
+  Host address the API Gateway binds to. Default: `0.0.0.0`.
+</ParamField>
+
+<ParamField body="API_GATEWAY_PORT" type="number" required>
+  Port the API Gateway HTTP server listens on. Default: `5000`.
+</ParamField>
+
+<ParamField body="API_GATEWAY_PROTOCOL" type="string" required>
+  Protocol used for API Gateway URLs in Swagger server list. Example: `http`.
+</ParamField>
+
+<ParamField body="API_GATEWAY_PROTOCOL_SECURE" type="string">
+  Secure protocol variant. Example: `https`.
+</ParamField>
+
+<ParamField body="API_ENDPOINT" type="string">
+  Host and port used when building Swagger server URLs. Example: `localhost:5000`.
+</ParamField>
+
+<ParamField body="API_ENDPOINT_PORT" type="number">
+  Port component for `API_ENDPOINT`. Example: `5000`.
+</ParamField>
+
+<ParamField body="SOCKET_HOST" type="URL">
+  WebSocket host URL. Example: `http://localhost:5000`.
+</ParamField>
+
+<ParamField body="ENABLE_CORS_IP_LIST" type="string">
+  Comma-separated list of origins allowed by CORS. Leave empty to disable CORS restrictions. Example: `https://app.example.com,https://dashboard.example.com`.
+</ParamField>
+
+<ParamField body="HIDE_EXPERIMENTAL_OIDC_CONTROLLERS" type="boolean">
+  When `true`, hides OID4VC, OID4VP, and x509 controller routes from the OpenAPI documentation. Default: `true`.
+</ParamField>
+
+<ParamField body="PUBLIC_LOCALHOST_URL" type="URL">
+  Localhost API URL added as a Swagger server entry.
+</ParamField>
+
+<ParamField body="PUBLIC_DEV_API_URL" type="URL">
+  Development environment API URL added as a Swagger server entry.
+</ParamField>
+
+<ParamField body="PUBLIC_QA_API_URL" type="URL">
+  QA environment API URL added as a Swagger server entry.
+</ParamField>
+
+<ParamField body="PUBLIC_PRODUCTION_API_URL" type="URL">
+  Production environment API URL added as a Swagger server entry.
+</ParamField>
+
+<ParamField body="PUBLIC_SANDBOX_API_URL" type="URL">
+  Sandbox environment API URL added as a Swagger server entry.
+</ParamField>
+
+<ParamField body="APP_PROTOCOL" type="string">
+  Application-level protocol identifier used in SSO redirect flows.
+</ParamField>
+
+<ParamField body="MODE" type="string">
+  Runtime mode. Example: `DEV`.
+</ParamField>
+
+---
+
+## Platform identity
+
+<ParamField body="PLATFORM_NAME" type="string" required>
+  Display name of the platform. Used as the Swagger API title. Example: `CREDEBL`.
+</ParamField>
+
+<ParamField body="PLATFORM_LOGO" type="URL">
+  URL of the platform logo image shown in emails and the web UI.
+</ParamField>
+
+<ParamField body="PLATFORM_WEB_URL" type="URL">
+  Public URL of the platform web application.
+</ParamField>
+
+<ParamField body="PLATFORM_URL" type="URL">
+  Base URL for the platform API. Example: `https://devapi.credebl.id`.
+</ParamField>
+
+<ParamField body="PUBLIC_PLATFORM_SUPPORT_EMAIL" type="string">
+  Support email address displayed to users.
+</ParamField>
+
+<ParamField body="POWERED_BY" type="string">
+  Organization name shown in "powered by" attribution.
+</ParamField>
+
+<ParamField body="POWERED_BY_URL" type="URL">
+  URL linked to the "powered by" attribution.
+</ParamField>
+
+<ParamField body="UPLOAD_LOGO_HOST" type="URL">
+  Domain used to construct public URLs for uploaded logo files.
+</ParamField>
+
+<ParamField body="FRONT_END_URL" type="URL">
+  URL of the front-end application. Example: `http://localhost:3000`.
+</ParamField>
+
+<ParamField body="SHORTENED_URL_DOMAIN" type="URL">
+  Domain of the S3 bucket that stores shortened URL objects. Example: `https://bucket-name.s3.ap-east-1.amazonaws.com`.
+</ParamField>
+
+<ParamField body="DEEPLINK_DOMAIN" type="URL">
+  Domain used to generate deep-links. The platform appends `url` as a query parameter. Example: `https://your-deeplink-domain?url=`.
+</ParamField>
+
+<ParamField body="PLATFORM_ADMIN_EMAIL" type="string" required>
+  Email address of the platform administrator account.
+</ParamField>
+
+<ParamField body="PLATFORM_PROFILE_MODE" type="string">
+  Deployment environment label. Example: `production`.
+</ParamField>
+
+<ParamField body="OOB_BATCH_SIZE" type="number">
+  Maximum number of out-of-band invitations dispatched in a single batch. Default: `10`.
+</ParamField>
+
+<ParamField body="PROOF_REQ_CONN_LIMIT" type="number">
+  Maximum concurrent proof-request connections. Default: `10`.
+</ParamField>
+
+---
+
+## Database
+
+<ParamField body="DATABASE_URL" type="string" required>
+  Full Prisma-compatible PostgreSQL connection string. Example: `postgresql://postgres:password@localhost:5432/postgres?schema=public`.
+</ParamField>
+
+<ParamField body="POOL_DATABASE_URL" type="string">
+  Pooled connection string (e.g., via Supabase PgBouncer). Used when connection pooling is required.
+</ParamField>
+
+<ParamField body="POSTGRES_HOST" type="string" required>
+  PostgreSQL host. Example: `0.0.0.0`.
+</ParamField>
+
+<ParamField body="POSTGRES_PORT" type="number" required>
+  PostgreSQL port. Default: `5432`.
+</ParamField>
+
+<ParamField body="POSTGRES_USER" type="string" required>
+  PostgreSQL username. Default: `postgres`.
+</ParamField>
+
+<ParamField body="POSTGRES_PASSWORD" type="string" required>
+  PostgreSQL password.
+  <Warning>Treat this as a secret. Do not log or expose this value.</Warning>
+</ParamField>
+
+<ParamField body="POSTGRES_DATABASE" type="string" required>
+  Name of the PostgreSQL database.
+</ParamField>
+
+<ParamField body="DB_ALERT_ENABLE" type="boolean">
+  When `true`, enables email alerts when the `ledger_id` column in `org_agents` is set to `null`. Requires the `utility` microservice.
+</ParamField>
+
+<ParamField body="DB_ALERT_EMAILS" type="string">
+  Comma-separated list of email addresses that receive database alerts.
+</ParamField>
+
+<ParamField body="PRISMA_LOGS" type="string">
+  Comma-separated Prisma log types. Example: `error,warn`. Adding `query` produces verbose logging for every SQL statement.
+</ParamField>
+
+---
+
+## NATS messaging
+
+<ParamField body="NATS_URL" type="string" required>
+  NATS server URL(s). Multiple servers can be provided as comma-separated values. Example: `nats://0.0.0.0:4222`.
+</ParamField>
+
+<ParamField body="NATS_HOST" type="string" required>
+  NATS server hostname. Example: `0.0.0.0`.
+</ParamField>
+
+<ParamField body="NATS_PORT" type="number" required>
+  NATS server port. Default: `4222`.
+</ParamField>
+
+<ParamField body="NATS_AUTH_TYPE" type="string" required>
+  Authentication method for NATS connections. One of: `nkey`, `creds`, `usernamePassword`, `none`. Default: `nkey`.
+</ParamField>
+
+<ParamField body="NATS_USER" type="string">
+  NATS username. Required when `NATS_AUTH_TYPE=usernamePassword`.
+</ParamField>
+
+<ParamField body="NATS_PASSWORD" type="string">
+  NATS password. Required when `NATS_AUTH_TYPE=usernamePassword`.
+  <Warning>Treat this as a secret.</Warning>
+</ParamField>
+
+<ParamField body="NATS_CREDS_FILE" type="string">
+  Absolute path to a NATS credentials file. Required when `NATS_AUTH_TYPE=creds`. Example: `/platform/app_user.creds`.
+</ParamField>
+
+<ParamField body="NOTIFICATION_NATS_AUTH_TYPE" type="string">
+  Auth type override for the notification service NATS connection. Accepts the same values as `NATS_AUTH_TYPE`.
+</ParamField>
+
+<ParamField body="ENABLE_NATS_NOTIFICATION" type="boolean">
+  Enables the NATS-based notification pathway. Default: `false`.
+</ParamField>
+
+### Per-service NKEY seeds
+
+Each microservice authenticates to NATS using its own NKey seed. Required when `NATS_AUTH_TYPE=nkey`.
+
+<Warning>
+  NKey seeds are private credentials. Treat every `*_NKEY_SEED` variable as a secret and rotate them if they are ever exposed.
+</Warning>
+
+<ParamField body="API_GATEWAY_NKEY_SEED" type="string">
+  NKey seed for the `api-gateway` service.
+</ParamField>
+
+<ParamField body="USER_NKEY_SEED" type="string">
+  NKey seed for the `user` service.
+</ParamField>
+
+<ParamField body="ORGANIZATION_NKEY_SEED" type="string">
+  NKey seed for the `organization` service.
+</ParamField>
+
+<ParamField body="AGENT_PROVISIONING_NKEY_SEED" type="string">
+  NKey seed for the `agent-provisioning` service.
+</ParamField>
+
+<ParamField body="AGENT_SERVICE_NKEY_SEED" type="string">
+  NKey seed for the `agent-service` service.
+</ParamField>
+
+<ParamField body="VERIFICATION_NKEY_SEED" type="string">
+  NKey seed for the `verification` service.
+</ParamField>
+
+<ParamField body="ISSUANCE_NKEY_SEED" type="string">
+  NKey seed for the `issuance` service.
+</ParamField>
+
+<ParamField body="CONNECTION_NKEY_SEED" type="string">
+  NKey seed for the `connection` service.
+</ParamField>
+
+<ParamField body="ECOSYSTEM_NKEY_SEED" type="string">
+  NKey seed for the `ecosystem` service.
+</ParamField>
+
+<ParamField body="CREDENTAILDEFINITION_NKEY_SEED" type="string">
+  NKey seed for the `credential-definition` service.
+</ParamField>
+
+<ParamField body="SCHEMA_NKEY_SEED" type="string">
+  NKey seed for the `schema` service.
+</ParamField>
+
+<ParamField body="UTILITIES_NKEY_SEED" type="string">
+  NKey seed for the `utilities` service.
+</ParamField>
+
+<ParamField body="GEOLOCATION_NKEY_SEED" type="string">
+  NKey seed for the `geo-location` service.
+</ParamField>
+
+<ParamField body="X509_NKEY_SEED" type="string">
+  NKey seed for the `x509` service.
+</ParamField>
+
+<ParamField body="OIDC4VC_ISSUANCE_NKEY_SEED" type="string">
+  NKey seed for the `oid4vc-issuance` service.
+</ParamField>
+
+<ParamField body="OIDC4VC_VERIFICATION_NKEY_SEED" type="string">
+  NKey seed for the `oid4vc-verification` service.
+</ParamField>
+
+### JetStream / streaming
+
+<ParamField body="AGGREGATE_STREAM" type="string">
+  Name of the JetStream aggregate stream. Default: `aggregate`.
+</ParamField>
+
+<ParamField body="DID_STREAM" type="string">
+  Name of the JetStream DID notification stream. Default: `did-notify`.
+</ParamField>
+
+<ParamField body="PULL_CONSUMER" type="string">
+  Name of the JetStream pull consumer. Default: `hub-pull-consumer`.
+</ParamField>
+
+<ParamField body="CONSUMER_CONFIG_ACK_WAIT" type="number">
+  Acknowledgement wait time in nanoseconds. Default: `10_000`.
+</ParamField>
+
+<ParamField body="CONSUMER_CONFIG_MAX_DELIVER" type="number">
+  Maximum delivery attempts before a message is considered dead. Default: `4`.
+</ParamField>
+
+---
+
+## Redis
+
+<ParamField body="REDIS_HOST" type="string" required>
+  Redis server host. Example: `0.0.0.0`.
+</ParamField>
+
+<ParamField body="REDIS_PORT" type="number" required>
+  Redis server port. Default: `6379`.
+</ParamField>
+
+<ParamField body="FILEUPLOAD_CACHE_TTL" type="number">
+  Time-to-live in milliseconds for the file-upload cache stored in Redis.
+</ParamField>
+
+<ParamField body="SESSIONS_LIMIT" type="number">
+  Maximum number of concurrent sessions a user can hold.
+</ParamField>
+
+<ParamField body="FIELD_UPLOAD_SIZE" type="number">
+  Maximum file upload size in bytes. Default: `10485760` (10 MB).
+</ParamField>
+
+---
+
+## Authentication
+
+### Supabase
+
+<ParamField body="SUPABASE_URL" type="URL" required>
+  URL of your Supabase project. Example: `https://xyzcompany.supabase.co`.
+</ParamField>
+
+<ParamField body="SUPABASE_KEY" type="string" required>
+  Supabase anonymous (public) API key.
+  <Warning>Although this is the public anon key, treat it as a secret in server-side `.env` files.</Warning>
+</ParamField>
+
+<ParamField body="SUPABASE_JWT_SECRET" type="string" required>
+  JWT secret from your Supabase project settings. Used to verify tokens server-side.
+  <Warning>This is a secret — never expose it in client-side code or logs.</Warning>
+</ParamField>
+
+### Keycloak
+
+<ParamField body="KEYCLOAK_DOMAIN" type="URL" required>
+  Base URL of the Keycloak server. Example: `http://localhost:8080/`.
+</ParamField>
+
+<ParamField body="KEYCLOAK_ADMIN_URL" type="URL" required>
+  Keycloak admin console URL. Example: `http://localhost:8080`.
+</ParamField>
+
+<ParamField body="KEYCLOAK_MASTER_REALM" type="string" required>
+  Name of the Keycloak master realm.
+</ParamField>
+
+<ParamField body="KEYCLOAK_MANAGEMENT_CLIENT_ID" type="string" required>
+  Client ID of the management client in Keycloak.
+</ParamField>
+
+<ParamField body="KEYCLOAK_MANAGEMENT_CLIENT_SECRET" type="string" required>
+  Secret of the management client.
+  <Warning>Treat as a secret.</Warning>
+</ParamField>
+
+<ParamField body="KEYCLOAK_REALM" type="string" required>
+  Keycloak realm used by the platform. Example: `credebl-platform`.
+</ParamField>
+
+<ParamField body="PLATFORM_ADMIN_KEYCLOAK_ID" type="string" required>
+  Client ID of the Keycloak client created for the platform admin console. Example: `adminClient`.
+</ParamField>
+
+<ParamField body="PLATFORM_ADMIN_KEYCLOAK_SECRET" type="string" required>
+  Secret of the platform admin Keycloak client.
+  <Warning>Treat as a secret.</Warning>
+</ParamField>
+
+<ParamField body="PLATFORM_ADMIN_OLD_CLIENT_ID" type="string">
+  Previous client ID — used when migrating users after a Keycloak client rename.
+</ParamField>
+
+### SSO clients
+
+<Note>
+  To support multiple SSO clients, add a set of four variables for each client and append its name to `SUPPORTED_SSO_CLIENTS`. The variable names follow the pattern `{CLIENT-NAME}_CLIENT_ALIAS`, `{CLIENT-NAME}_DOMAIN`, `{CLIENT-NAME}_KEYCLOAK_MANAGEMENT_CLIENT_ID`, and `{CLIENT-NAME}_KEYCLOAK_MANAGEMENT_CLIENT_SECRET`.
+</Note>
+
+<ParamField body="SUPPORTED_SSO_CLIENTS" type="string">
+  Comma-separated list of enabled SSO client names. Example: `CREDEBL,VERIFIER`.
+</ParamField>
+
+<ParamField body="CREDEBL_CLIENT_ALIAS" type="string">
+  Alias token that identifies the default CREDEBL SSO client. Example: `CREDEBL`.
+</ParamField>
+
+<ParamField body="CREDEBL_DOMAIN" type="URL">
+  Redirect URL for the default CREDEBL client after login. Example: `http://localhost:3000`.
+</ParamField>
+
+<ParamField body="CREDEBL_KEYCLOAK_MANAGEMENT_CLIENT_ID" type="string">
+  Encrypted Keycloak management client ID for the CREDEBL SSO client. Encrypt using `CRYPTO_PRIVATE_KEY`.
+</ParamField>
+
+<ParamField body="CREDEBL_KEYCLOAK_MANAGEMENT_CLIENT_SECRET" type="string">
+  Encrypted Keycloak management client secret for the CREDEBL SSO client.
+  <Warning>Store the encrypted value, not the plaintext secret.</Warning>
+</ParamField>
+
+### Crypto
+
+<ParamField body="CRYPTO_PRIVATE_KEY" type="string" required>
+  Private key used to encrypt/decrypt sensitive configuration values (e.g., Keycloak client secrets). Must match the key used in the Studio UI.
+  <Warning>This is a master secret. Loss or exposure compromises all encrypted values.</Warning>
+</ParamField>
+
+### FIDO / WebAuthn
+
+<ParamField body="FIDO_API_ENDPOINT" type="URL">
+  Host and port of the FIDO (WebAuthn) server. Example: `http://localhost:8000`.
+</ParamField>
+
+---
+
+## AWS / storage
+
+<Warning>
+  All AWS keys are secrets. Use IAM roles or secret management tooling (e.g., AWS Secrets Manager) in production instead of plaintext environment variables.
+</Warning>
+
+### General AWS credentials
+
+<ParamField body="AWS_PUBLIC_ACCESS_KEY" type="string">
+  AWS access key ID for the public assets bucket.
+</ParamField>
+
+<ParamField body="AWS_PUBLIC_SECRET_KEY" type="string">
+  AWS secret access key for the public assets bucket.
+</ParamField>
+
+<ParamField body="AWS_PUBLIC_REGION" type="string">
+  AWS region for the public assets bucket. Example: `ap-south-1`.
+</ParamField>
+
+<ParamField body="AWS_PUBLIC_BUCKET_NAME" type="string">
+  Name of the S3 bucket used for public assets.
+</ParamField>
+
+<ParamField body="AWS_ORG_LOGO_BUCKET_NAME" type="string">
+  Name of the S3 bucket used for organization logos.
+</ParamField>
+
+<ParamField body="AWS_ACCESS_KEY" type="string">
+  General AWS access key ID.
+</ParamField>
+
+<ParamField body="AWS_SECRET_KEY" type="string">
+  General AWS secret access key.
+</ParamField>
+
+<ParamField body="AWS_REGION" type="string">
+  General AWS region. Example: `us-east-1`.
+</ParamField>
+
+<ParamField body="AWS_BUCKET" type="string">
+  General S3 bucket name.
+</ParamField>
+
+<ParamField body="AWS_ACCOUNT_ID" type="string">
+  AWS account ID.
+</ParamField>
+
+<ParamField body="S3_BUCKET_ARN" type="string">
+  ARN of the S3 bucket. Example: `arn:aws:s3:::bucket-name`.
+</ParamField>
+
+### S3 object store (dedicated credentials)
+
+<ParamField body="AWS_S3_STOREOBJECT_ACCESS_KEY" type="string">
+  AWS access key ID for the object-store S3 bucket.
+</ParamField>
+
+<ParamField body="AWS_S3_STOREOBJECT_SECRET_KEY" type="string">
+  AWS secret access key for the object-store S3 bucket.
+</ParamField>
+
+<ParamField body="AWS_S3_STOREOBJECT_REGION" type="string">
+  AWS region for the object-store S3 bucket.
+</ParamField>
+
+<ParamField body="AWS_S3_STOREOBJECT_BUCKET" type="string">
+  Name of the S3 bucket used for stored objects.
+</ParamField>
+
+### ECS (agent provisioning)
+
+<ParamField body="CLUSTER_NAME" type="string">
+  ECS cluster name for Credo controller agents. Example: `CREDO-CONTROLLER-CLUSTER`.
+</ParamField>
+
+<ParamField body="TASKDEFINITION_FAMILY" type="string">
+  ECS task definition family name. Example: `CREDO-CONTROLLER-TASKDEFINITION`.
+</ParamField>
+
+<ParamField body="ECS_SECURITY_GROUP_ID" type="string">
+  Security group ID for ECS tasks.
+</ParamField>
+
+<ParamField body="ECS_SUBNET_ID" type="string">
+  Subnet ID for ECS tasks.
+</ParamField>
+
+<ParamField body="FILESYSTEMID" type="string">
+  EFS filesystem ID used by ECS tasks.
+</ParamField>
+
+<ParamField body="INBOUND_TG_ARN" type="string">
+  ARN of the inbound target group for agent load balancing.
+</ParamField>
+
+<ParamField body="ADMIN_TG_ARN" type="string">
+  ARN of the admin target group for agent load balancing.
+</ParamField>
+
+---
+
+## Email
+
+<ParamField body="EMAIL_PROVIDER" type="string" required>
+  Active email provider. One of: `resend`, `sendgrid`, `ses`, `smtp`.
+</ParamField>
+
+<ParamField body="RESEND_API_KEY" type="string">
+  API key for the Resend email service. Required when `EMAIL_PROVIDER=resend`. Example: `re_xxxxxxxxxx`.
+  <Warning>Treat as a secret.</Warning>
+</ParamField>
+
+<ParamField body="SENDGRID_API_KEY" type="string">
+  API key for SendGrid. Required when `EMAIL_PROVIDER=sendgrid`. Example: `SG.xxxxxxx`.
+  <Warning>Treat as a secret.</Warning>
+</ParamField>
+
+<ParamField body="AWS_SES_REGION" type="string">
+  AWS region for SES. Required when `EMAIL_PROVIDER=ses`. Example: `ap-south-1`.
+</ParamField>
+
+<ParamField body="AWS_SES_ACCESS_KEY" type="string">
+  AWS access key ID for SES.
+</ParamField>
+
+<ParamField body="AWS_SES_SECRET_KEY" type="string">
+  AWS secret access key for SES.
+  <Warning>Treat as a secret.</Warning>
+</ParamField>
+
+<ParamField body="SMTP_HOST" type="string">
+  SMTP server hostname. Required when `EMAIL_PROVIDER=smtp`. Example: `smtp.gmail.com`.
+</ParamField>
+
+<ParamField body="SMTP_PORT" type="number">
+  SMTP server port. Example: `587`.
+</ParamField>
+
+<ParamField body="SMTP_USER" type="string">
+  SMTP username / sender address.
+</ParamField>
+
+<ParamField body="SMTP_PASS" type="string">
+  SMTP password.
+  <Warning>Treat as a secret.</Warning>
+</ParamField>
+
+---
+
+## Agent
+
+<ParamField body="AGENT_HOST" type="string">
+  SSH-style address of the agent host VM. Example: `username@0.0.0.0`.
+</ParamField>
+
+<ParamField body="AGENT_PROTOCOL" type="string">
+  Protocol for agent communication. Example: `http`.
+</ParamField>
+
+<ParamField body="AGENT_API_KEY" type="string" required>
+  API key for the base agent wallet. Must be at least 16 characters. Example: `supersecret-that-too-16chars`.
+  <Warning>Treat as a secret.</Warning>
+</ParamField>
+
+<ParamField body="AFJ_VERSION" type="string">
+  Docker image tag for the AFJ (Aries Framework JavaScript) agent. Example: `afj-0.4.1:latest`.
+</ParamField>
+
+<ParamField body="AFJ_AGENT_SPIN_UP" type="string">
+  Absolute path to the agent startup shell script. Example: `/apps/agent-provisioning/AFJ/scripts/start_agent.sh`.
+</ParamField>
+
+<ParamField body="AFJ_AGENT_ENDPOINT_PATH" type="string">
+  Directory path for agent endpoint configuration files. Example: `/apps/agent-provisioning/AFJ/endpoints/`.
+</ParamField>
+
+<ParamField body="WALLET_STORAGE_HOST" type="string">
+  Host (IP address) of the PostgreSQL database used for agent wallet storage.
+</ParamField>
+
+<ParamField body="WALLET_STORAGE_PORT" type="number">
+  Port of the wallet storage database. Default: `5432`.
+</ParamField>
+
+<ParamField body="WALLET_STORAGE_USER" type="string">
+  Username for the wallet storage database. Default: `postgres`.
+</ParamField>
+
+<ParamField body="WALLET_STORAGE_PASSWORD" type="string">
+  Password for the wallet storage database.
+  <Warning>Treat as a secret.</Warning>
+</ParamField>
+
+<ParamField body="PLATFORM_WALLET_NAME" type="string">
+  Name of the platform administrator wallet. Default: `platform-admin`.
+</ParamField>
+
+<ParamField body="PLATFORM_WALLET_PASSWORD" type="string">
+  Encrypted password for the platform wallet. Encrypt with `crypto-js` using `CRYPTO_PRIVATE_KEY`.
+  <Warning>Treat as a secret.</Warning>
+</ParamField>
+
+<ParamField body="PLATFORM_SEED" type="string">
+  32-character seed used when creating the platform DID.
+</ParamField>
+
+<ParamField body="PLATFORM_ID" type="string">
+  Unique identifier for this platform instance.
+</ParamField>
+
+<ParamField body="FILE_SERVER" type="string">
+  URL of the file server used to host tails files and other agent assets.
+</ParamField>
+
+<ParamField body="FILE_SERVER_PORT" type="number">
+  Port of the file server. Default: `8081`.
+</ParamField>
+
+<ParamField body="FILE_SERVER_USER" type="string">
+  Username for file server SSH access. Default: `credebl`.
+</ParamField>
+
+<ParamField body="FILE_SERVER_HOST" type="string">
+  Hostname or IP of the file server. Example: `0.0.0.0`.
+</ParamField>
+
+<ParamField body="SCHEMA_FILE_SERVER_URL" type="URL">
+  URL of the schema file server (used for Polygon-based W3C schemas).
+</ParamField>
+
+<ParamField body="SCHEMA_FILE_SERVER_TOKEN" type="string">
+  Authentication token for the schema file server.
+  <Warning>Treat as a secret.</Warning>
+</ParamField>
+
+<ParamField body="PROTOCOL" type="string">
+  Protocol used by agent endpoint URLs. Example: `http`.
+</ParamField>
+
+---
+
+## Observability
+
+### ELK Stack
+
+<ParamField body="ELK_LOG" type="boolean">
+  Enables ELK-based structured logging. Example: `true`.
+</ParamField>
+
+<ParamField body="CONSOLE_LOG_FLAG" type="boolean">
+  Enables console output of ELK-format logs. Example: `true`.
+</ParamField>
+
+<ParamField body="LOG_LEVEL" type="string">
+  Log verbosity level. Example: `debug`.
+</ParamField>
+
+<ParamField body="ELK_LOG_PATH" type="URL">
+  Elasticsearch endpoint for log ingestion. Example: `http://localhost:9200/`.
+</ParamField>
+
+<ParamField body="ELK_USERNAME" type="string">
+  Elasticsearch username. Example: `elastic`.
+</ParamField>
+
+<ParamField body="ELK_PASSWORD" type="string">
+  Elasticsearch password.
+  <Warning>Treat as a secret.</Warning>
+</ParamField>
+
+<ParamField body="ORGANIZATION" type="string">
+  Organization label attached to log entries. Example: `credebl`.
+</ParamField>
+
+<ParamField body="CONTEXT" type="string">
+  Context label attached to log entries. Example: `platform`.
+</ParamField>
+
+<ParamField body="APP" type="string">
+  Application label attached to log entries. Example: `api`.
+</ParamField>
+
+<ParamField body="HOSTNAME" type="string">
+  Hostname or unique identifier for this service instance. Example: `localhost`.
+</ParamField>
+
+### OpenTelemetry
+
+<ParamField body="IS_ENABLE_OTEL" type="boolean">
+  Enables the OpenTelemetry SDK. Default: `false`.
+</ParamField>
+
+<ParamField body="OTEL_SERVICE_NAME" type="string">
+  Logical service name shown in observability tools such as SigNoz. Example: `CREDEBL-PLATFORM-SERVICE`.
+</ParamField>
+
+<ParamField body="OTEL_SERVICE_VERSION" type="string">
+  Service version reported to the OTel collector. Example: `1.0.0`.
+</ParamField>
+
+<ParamField body="OTEL_TRACES_OTLP_ENDPOINT" type="URL">
+  OTLP/HTTP endpoint for trace export. Example: `http://localhost:4318/v1/traces`.
+</ParamField>
+
+<ParamField body="OTEL_LOGS_OTLP_ENDPOINT" type="URL">
+  OTLP/HTTP endpoint for log export. Example: `http://localhost:4318/v1/logs`.
+</ParamField>
+
+<ParamField body="OTEL_HEADERS_KEY" type="string">
+  API key or token used to authenticate with the OTel collector.
+  <Warning>Treat as a secret.</Warning>
+</ParamField>
+
+<ParamField body="OTEL_LOGGER_NAME" type="string">
+  Name of the OpenTelemetry logger. Example: `credebl-platform-logger`.
+</ParamField>

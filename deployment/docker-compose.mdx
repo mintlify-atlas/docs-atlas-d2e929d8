@@ -1,0 +1,237 @@
+---
+title: "Docker Compose deployment"
+description: "Deploy the full CREDEBL platform stack using Docker Compose with pre-built images from GitHub Container Registry."
+---
+
+## Prerequisites
+
+- Docker Engine 20.10 or later
+- Docker Compose v2 (`docker compose` command, not `docker-compose`)
+- A running PostgreSQL instance (version 16 recommended) accessible from the containers
+- Git
+
+## Services
+
+The `docker-compose.yml` file defines the following services:
+
+| Service | Image | Port | Description |
+|---|---|---|---|
+| `nats` | `nats` | 4222, 6222, 8222 | Message broker for inter-service communication |
+| `redis` | `redis:6.2-alpine` | 6379 | Cache layer used by `api-gateway` and `issuance` |
+| `seed` | `ghcr.io/credebl/seed:latest` | — | Runs Prisma migrations and seeds master data |
+| `api-gateway` | `ghcr.io/credebl/api-gateway:latest` | 5000 | HTTP entry point; exposes Swagger UI |
+| `user` | `ghcr.io/credebl/user:latest` | — | User registration, authentication, and profile management |
+| `utility` | `ghcr.io/credebl/utility:latest` | — | Shared utilities required by connection and other services |
+| `connection` | `ghcr.io/credebl/connection:latest` | — | DIDComm connection management |
+| `issuance` | `ghcr.io/credebl/issuance:latest` | — | Verifiable credential issuance |
+| `ledger` | `ghcr.io/credebl/ledger:latest` | — | Ledger interaction and DID registration |
+| `organization` | `ghcr.io/credebl/organization:latest` | — | Organization and wallet management |
+| `verification` | `ghcr.io/credebl/verification:latest` | — | Credential proof verification |
+| `agent-provisioning` | `ghcr.io/credebl/agent-provisioning:latest` | — | Spins up per-organization Credo (AFJ) agent containers |
+| `agent-service` | `ghcr.io/credebl/agent-service:latest` | — | Communicates with running agent containers |
+| `cloud-wallet` | `ghcr.io/credebl/cloud-wallet:latest` | — | Cloud wallet service |
+| `geolocation` | `ghcr.io/credebl/geolocation:latest` | — | Geolocation data service |
+| `notification` | `ghcr.io/credebl/notification:latest` | — | Email and push notification dispatch |
+| `webhook` | `ghcr.io/credebl/webhook:latest` | — | Outbound webhook delivery |
+| `schema-file-server` | `ghcr.io/credebl/schema-file-server:latest` | — | Serves schema files for Polygon/W3C credentials |
+
+## Service startup order
+
+The `depends_on` declarations in `docker-compose.yml` define the following boot sequence:
+
+```
+nats, redis
+  └── api-gateway
+        ├── user
+        ├── utility
+        │     └── connection
+        │           ├── issuance (also needs redis)
+        │           │     └── ledger
+        │           │           └── organization
+        │           │                 └── verification
+        │           │                       └── agent-provisioning
+        │           │                             └── agent-service
+        ├── cloud-wallet
+        ├── geolocation
+        ├── notification
+        └── webhook
+```
+
+`agent-service` additionally waits for `agent-provisioning` to log `"Agent-Provisioning-Service Microservice is listening to NATS"` before it starts.
+
+## Deployment
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/credebl/platform.git
+    cd platform
+    ```
+  </Step>
+
+  <Step title="Configure environment variables">
+    Copy the sample file and fill in the required values:
+
+    ```bash
+    cp .env.sample .env
+    ```
+
+    <Warning>
+      The following variables must be set before any service will start correctly:
+
+      - `DATABASE_URL` — PostgreSQL connection string, e.g. `postgresql://postgres:password@host:5432/dbname?schema=public`
+      - `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DATABASE`
+      - `NATS_URL` — defaults to `nats://0.0.0.0:4222`
+      - `REDIS_HOST`, `REDIS_PORT`
+      - `PLATFORM_ADMIN_EMAIL` — used by the seed service to create the platform admin user
+      - `CRYPTO_PRIVATE_KEY` — 32-character key used to encrypt wallet credentials; must match the value used by the Studio UI
+      - `KEYCLOAK_DOMAIN`, `KEYCLOAK_REALM`, `KEYCLOAK_MANAGEMENT_CLIENT_ID`, `KEYCLOAK_MANAGEMENT_CLIENT_SECRET`
+      - `PLATFORM_ADMIN_KEYCLOAK_ID`, `PLATFORM_ADMIN_KEYCLOAK_SECRET`
+      - All `*_NKEY_SEED` variables — one per microservice (e.g. `USER_NKEY_SEED`, `API_GATEWAY_NKEY_SEED`, `ORGANIZATION_NKEY_SEED`, etc.)
+      - `AGENT_HOST` — SSH connection string for the agent host VM, e.g. `username@0.0.0.0`
+      - `AFJ_VERSION` — Docker image tag for Credo agents, e.g. `afj-0.4.1:latest`
+    </Warning>
+  </Step>
+
+  <Step title="Start infrastructure services">
+    Bring up NATS and Redis before the application services:
+
+    <CodeGroup>
+
+    ```bash combined
+    docker compose up nats redis -d
+    ```
+
+    ```bash separate files
+    docker compose -f docker-compose.nats.yml up -d
+    docker compose -f docker-compose.redis.yml up -d
+    ```
+
+    </CodeGroup>
+
+    Verify they are healthy:
+
+    ```bash
+    docker compose ps nats redis
+    ```
+  </Step>
+
+  <Step title="Run the seed service">
+    The `seed` service applies Prisma migrations and loads master data (org roles, agent types, ledger configs, platform config):
+
+    ```bash
+    docker compose up seed
+    ```
+
+    The container exits on completion. Check for errors before proceeding:
+
+    ```bash
+    docker compose logs seed
+    ```
+
+    The seed service mounts `./libs/prisma-service/prisma/data/credebl-master-table.json` into the container. Ensure this file is present in your checkout.
+  </Step>
+
+  <Step title="Create the agent.env file">
+    The `agent-provisioning` service mounts `./agent.env` into the container at `/app/agent.env`. This file is passed to each spawned agent container. Create it with at minimum the wallet storage credentials:
+
+    ```bash
+    touch agent.env
+    ```
+
+    Add the values your agent containers require, for example:
+
+    ```ini agent.env
+    WALLET_STORAGE_HOST=<your-postgres-host>
+    WALLET_STORAGE_PORT=5432
+    WALLET_STORAGE_USER=postgres
+    WALLET_STORAGE_PASSWORD=<your-password>
+    ```
+  </Step>
+
+  <Step title="Start all platform services">
+    ```bash
+    docker compose up -d
+    ```
+
+    To follow logs across all services:
+
+    ```bash
+    docker compose logs -f
+    ```
+  </Step>
+
+  <Step title="Verify services are running">
+    ```bash
+    docker compose ps
+    ```
+
+    All services should show `running` status. The `seed` container will show `exited 0` — that is expected.
+
+    Confirm the API gateway is accepting requests:
+
+    ```bash
+    curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/api
+    ```
+
+    A `200` or `301` response confirms the gateway is up.
+  </Step>
+
+  <Step title="Access the Swagger UI">
+    Open your browser and navigate to:
+
+    ```
+    http://localhost:5000/api
+    ```
+
+    The interactive API documentation lists all available endpoints grouped by microservice.
+  </Step>
+</Steps>
+
+## Port reference
+
+| Port | Service | Protocol | Purpose |
+|---|---|---|---|
+| `5000` | `api-gateway` | HTTP | REST API and Swagger UI |
+| `4222` | `nats` | TCP | NATS client connections |
+| `6222` | `nats` | TCP | NATS cluster routing |
+| `8222` | `nats` | HTTP | NATS monitoring and health |
+| `6379` | `redis` | TCP | Redis cache |
+
+## Volume mounts
+
+The `agent-provisioning` service requires the following mounts:
+
+```yaml
+volumes:
+  - $PWD/apps/agent-provisioning/AFJ/agent-config:/app/agent-provisioning/AFJ/agent-config
+  - /var/run/docker.sock:/var/run/docker.sock
+  - /app/agent-provisioning/AFJ/token:/app/agent-provisioning/AFJ/token
+  - $PWD/agent.env:/app/agent.env
+```
+
+The Docker socket mount (`/var/run/docker.sock`) is required so `agent-provisioning` can spin up per-organization agent containers on the host. The `agent-service` also mounts the Docker socket and uses `volumes_from: agent-provisioning` to access the shared `agent-config` and `endpoints` directories.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="seed service fails with a database connection error">
+    Confirm `DATABASE_URL` in `.env` points to a reachable PostgreSQL instance. If PostgreSQL is running on the host machine, use the host's LAN IP rather than `localhost` or `127.0.0.1`, since services run inside Docker containers.
+  </Accordion>
+
+  <Accordion title="api-gateway container exits immediately">
+    Check logs with `docker compose logs api-gateway`. Missing or malformed NKEY seed values are a common cause. Ensure all `*_NKEY_SEED` variables in `.env` are set.
+  </Accordion>
+
+  <Accordion title="agent-service never starts">
+    `agent-service` waits for the log line `"Agent-Provisioning-Service Microservice is listening to NATS"` from `agent-provisioning`. If `agent-provisioning` fails to connect to NATS, `agent-service` will wait indefinitely. Run `docker compose logs agent-provisioning` to diagnose.
+  </Accordion>
+
+  <Accordion title="NATS authentication errors">
+    The `.env.sample` sets `NATS_AUTH_TYPE=nkey`. Each service has its own `*_NKEY_SEED` variable. Generate unique NKey seeds for each service and set them in `.env`. The `NATS_CREDS_FILE` variable is only required when `NATS_AUTH_TYPE=creds`.
+  </Accordion>
+
+  <Accordion title="agent containers are not being created">
+    Verify that `/var/run/docker.sock` is mounted into `agent-provisioning` and that the user running Docker has permission to access the socket. Also confirm that `AGENT_HOST` and `AFJ_VERSION` are set in `.env`.
+  </Accordion>
+</AccordionGroup>

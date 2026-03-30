@@ -1,0 +1,163 @@
+---
+title: "Webhooks API"
+description: "Register and manage webhook URLs to receive real-time event notifications from the CREDEBL platform."
+---
+
+Webhooks allow your application to receive push notifications when events occur on the CREDEBL platform. Register an HTTPS endpoint for your organization and CREDEBL will POST event payloads to that URL as events happen.
+
+## Authentication
+
+All webhook endpoints require a JWT bearer token. Managing webhooks is restricted to organization **Owner** and **Admin** roles (read access is also available to **Issuer** and **Verifier** roles).
+
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+## Base path
+
+All webhook endpoints are rooted at `/webhooks`.
+
+---
+
+## Register a webhook
+
+`POST /webhooks/orgs/:orgId/register`
+
+Register a webhook URL for an organization.
+
+**Required roles:** `owner`, `admin`
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization to register the webhook for.
+</ParamField>
+
+### Request body
+
+<ParamField body="webhookUrl" type="string" required>
+  A valid URL that CREDEBL will POST event payloads to.
+</ParamField>
+
+<ParamField body="webhookSecret" type="string">
+  Optional shared secret used for payload verification. Must be at least 16 characters long.
+</ParamField>
+
+### Example
+
+```bash
+curl -X POST http://localhost:5000/webhooks/orgs/6e672a9c-64f0-4d98-b312-f578f633800b/register \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "webhookUrl": "https://your-app.example.com/webhooks/credebl"
+  }'
+```
+
+### Response
+
+<ResponseField name="statusCode" type="number">
+  `201` on success.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Confirmation message.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The registered webhook record.
+</ResponseField>
+
+---
+
+## Get webhook URL
+
+`GET /webhooks/orgs/webhookurl`
+
+Retrieve the registered webhook URL for an organization or tenant.
+
+**Required roles:** `owner`, `admin`, `issuer`, `verifier`
+
+### Query parameters
+
+<ParamField query="orgId" type="string">
+  Organization ID to look up the webhook for.
+</ParamField>
+
+<ParamField query="tenantId" type="string">
+  UUID of a specific tenant to look up.
+</ParamField>
+
+### Example
+
+```bash
+curl "http://localhost:5000/webhooks/orgs/webhookurl?orgId=6e672a9c-64f0-4d98-b312-f578f633800b" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+## Update a webhook
+
+`PATCH /webhooks/orgs/:orgId`
+
+Update the webhook URL or secret for an organization.
+
+**Required roles:** `owner`, `admin`
+
+### Path parameters
+
+<ParamField path="orgId" type="string" required>
+  UUID of the organization whose webhook to update.
+</ParamField>
+
+### Request body
+
+<ParamField body="webhookUrl" type="string">
+  New webhook endpoint URL.
+</ParamField>
+
+<ParamField body="webhookSecret" type="string">
+  New shared secret. Must be at least 16 characters long.
+</ParamField>
+
+### Example
+
+```bash
+curl -X PATCH http://localhost:5000/webhooks/orgs/6e672a9c-64f0-4d98-b312-f578f633800b \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "webhookUrl": "https://your-app.example.com/webhooks/credebl-v2"
+  }'
+```
+
+---
+
+## Webhook payload structure
+
+The platform POSTs event data to your registered URL using the `WebhookResponseDto` structure:
+
+<ResponseField name="webhookUrl" type="string">
+  The URL the payload was delivered to.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The event-specific payload from the underlying Aries agent or platform service.
+</ResponseField>
+
+<Note>
+  The exact shape of `data` depends on the event type (connection, credential, or proof) and
+  the DIDComm protocol used. Inspect the payloads your endpoint receives to understand the
+  structure for your specific setup.
+</Note>
+
+---
+
+## Error responses
+
+| Status | Meaning |
+|---|---|
+| `400 Bad Request` | Invalid `orgId`, missing `webhookUrl`, or `webhookSecret` shorter than 16 characters. |
+| `401 Unauthorized` | JWT token missing or expired. |
+| `403 Forbidden` | Insufficient role — only `owner` and `admin` can register or update webhooks. |
